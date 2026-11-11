@@ -1,0 +1,46 @@
+fragment InventoryPageInfo on PageInfo {
+  hasNextPage
+  endCursor
+}
+
+fragment TeamState on Team {
+  slug
+  purpose
+  deletionInProgress
+}
+
+query Teams($after: Cursor) {
+  teams(first: 100, after: $after) {
+    # @genqlient(flatten: true)
+    nodes {
+      ...TeamState
+    }
+    # @genqlient(flatten: true)
+    pageInfo {
+      ...InventoryPageInfo
+    }
+  }
+}
+
+query TeamBySlug($slug: Slug!) {
+  # @genqlient(flatten: true)
+  team(slug: $slug) {
+    ...TeamState
+  }
+}
+
+query Members($slug: Slug!, $after: Cursor) {
+  team(slug: $slug) {
+    members(first: 100, after: $after) {
+      nodes {
+        user {
+          email
+        }
+      }
+      # @genqlient(flatten: true)
+      pageInfo {
+        ...InventoryPageInfo
+      }
+    }
+  }
+}
