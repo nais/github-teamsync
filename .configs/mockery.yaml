@@ -1,0 +1,8 @@
+dir: "{{ .InterfaceDir }}"
+filename: "mock_{{ .InterfaceName | snakecase }}.go"
+template: testify
+packages:
+  github.com/nais/nais-github-teamsync/internal/reconcilers/github/team:
+    interfaces:
+      TeamsService:
+      GraphClient:

@@ -1,0 +1,13 @@
+schema: ../internal/naisapi/schema.graphql
+operations: ../internal/naisapi/queries.graphql
+generated: ../internal/naisapi/generated.go
+package: naisapi
+optional: pointer
+# Keep null objects distinguishable from empty objects, even for schema-non-null
+# fields: incomplete inventories must fail closed rather than imply deletions.
+use_struct_references: true
+bindings:
+  Cursor:
+    type: string
+  Slug:
+    type: string

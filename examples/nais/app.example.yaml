@@ -1,0 +1,21 @@
+# Consumer example: copy to .nais/app.<environment>.yaml in your own repository.
+# This file is not selected for real Nais environments unless copied/renamed.
+spec:
+  filesFrom:
+    # For your own App: configure GITHUB_APP_PRIVATE_KEY_FILE in the runtime Secret
+    # as /run/secrets/github-app/private-key.pem.
+    - secret: nais-github-teamsync-github-app
+      mountPath: /run/secrets/github-app
+      mode: 292 # 0444; readable by the non-root process, never writable.
+  accessPolicy:
+    inbound:
+      rules:
+        - application: nais-api
+          namespace: your-api-team
+    outbound:
+      external:
+        - host: console.example.com # Host from NAIS_API_URL; HTTPS is required.
+  # Optional when the API cannot reach the internal service. Replace with an
+  # ingress allowed for your team/environment. Do not expose health or metrics.
+  ingresses:
+    - https://nais-github-teamsync.example.com/webhooks/nais
