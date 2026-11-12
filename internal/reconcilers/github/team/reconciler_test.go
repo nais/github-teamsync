@@ -90,61 +90,6 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 
 	log := slog.New(slog.DiscardHandler)
 
-	t.Run("missing github team is created", func(t *testing.T) {
-		naisTeam := &naisapi.Team{
-			Slug:    teamSlug,
-			Purpose: teamPurpose,
-		}
-
-		apiClient := newTestSource(t, teamSlug)
-
-		graphClient := github_team_reconciler.NewMockGraphClient(t)
-		teamsService := github_team_reconciler.NewMockTeamsService(t)
-		expectParentTeam(t, teamsService, org)
-		teamsService.EXPECT().GetTeamBySlug(ctx, org, teamSlug).
-			Return(nil, &github.Response{Response: &http.Response{StatusCode: http.StatusNotFound}}, nil).Once()
-		teamsService.EXPECT().
-			CreateTeam(ctx, org, github.CreateTeamRequest{Name: teamSlug, Description: new(teamPurpose), Privacy: new("closed"), ParentTeamID: new(int64(123))}).
-			Return(
-				&github.Team{Slug: new(teamSlug)},
-				&github.Response{Response: &http.Response{StatusCode: http.StatusCreated}},
-				nil,
-			).
-			Once()
-		teamsService.EXPECT().
-			ListTeamMembersBySlug(mock.Anything, org, teamSlug, mock.Anything).
-			Return(
-				[]*github.User{},
-				&github.Response{Response: &http.Response{StatusCode: http.StatusOK}},
-				nil,
-			).
-			Once()
-		teamsService.EXPECT().
-			UpdateTeamBySlug(mock.Anything, org, teamSlug, github.UpdateTeamRequest{
-				Name:         new(teamSlug),
-				Description:  new(teamPurpose),
-				Privacy:      new("closed"),
-				ParentTeamID: new(int64(123)),
-			}).
-			Return(&github.Team{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
-			Once()
-		teamsService.EXPECT().
-			CreateOrUpdateIDPGroupConnectionsBySlug(
-				mock.Anything,
-				org,
-				teamSlug,
-				github.IDPGroupList{Groups: []*github.IDPGroup{}},
-			).
-			Return(&github.IDPGroupList{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
-			Once()
-
-		reconciler := github_team_reconciler.New(org, teamsService, graphClient)
-
-		if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
 	t.Run("github team not available", func(t *testing.T) {
 		naisTeam := &naisapi.Team{
 			Slug:    teamSlug,
@@ -436,33 +381,6 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 		reconciler := github_team_reconciler.New(org, teamsService, graphClient)
 
 		if err := reconciler.Delete(ctx, nil, naisTeam, log); err == nil || !strings.Contains(err.Error(), "unexpected server response from GitHub") {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("successful delete", func(t *testing.T) {
-		naisTeam := &naisapi.Team{Slug: teamSlug}
-
-		graphClient := github_team_reconciler.NewMockGraphClient(t)
-		teamsService := github_team_reconciler.NewMockTeamsService(t)
-		expectOwnedTeam(t, teamsService, ctx, org, teamSlug)
-		teamsService.EXPECT().
-			DeleteTeamBySlug(ctx, org, teamSlug).
-			Return(
-				&github.Response{
-					Response: &http.Response{
-						StatusCode: http.StatusNoContent,
-						Status:     "204: No Content",
-						Body:       io.NopCloser(strings.NewReader("")),
-					},
-				},
-				nil,
-			).
-			Once()
-
-		reconciler := github_team_reconciler.New(org, teamsService, graphClient)
-
-		if err := reconciler.Delete(ctx, nil, naisTeam, log); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 	})

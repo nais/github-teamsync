@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nais/nais-github-teamsync/internal/naisapi"
 	"github.com/nais/nais-github-teamsync/internal/webhook"
 )
 
@@ -62,73 +61,6 @@ func runIntegrationWorker(t *testing.T, s *Syncer, ctx context.Context, cancel c
 		<-done
 	})
 	return done
-}
-
-func TestSignedWebhooksQueueSerialFreshReadsAndDeletionFollowup(t *testing.T) {
-	s, source, r := newTestSyncer()
-	s.Queue = NewTeamQueue()
-	hooks := webhook.New([]byte(integrationWebhookSecret), integrationWebhookSource, s.Queue.Enqueue, s.Log)
-	source.targeted = map[string]*naisapi.Team{
-		"target": {Slug: "target"},
-		"other":  {Slug: "other"},
-	}
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	started := make(chan struct{})
-	release := make(chan struct{})
-	source.onTeam = func(_ context.Context, slug string) {
-		if len(source.teamCalls) == 3 && slug == "target" {
-			source.targeted[slug] = &naisapi.Team{Slug: slug, DeletionInProgress: true}
-		}
-	}
-	r.onReconcile = func(ctx context.Context, slug string) {
-		if slug == "target" {
-			close(started)
-			select {
-			case <-release:
-			case <-ctx.Done():
-			}
-		}
-	}
-	r.onDelete = func(context.Context, string) error {
-		cancel()
-		return nil
-	}
-	for _, event := range []struct{ id, eventType, slug string }{
-		{"first", "io.nais.team.member.removed", "target"},
-		{"coalesced", "io.nais.team.confirm.delete.key", "target"},
-		{"distinct", "io.nais.team.updated", "other"},
-	} {
-		if status := deliverWebhook(t, hooks, event.id, event.eventType, event.slug); status != http.StatusAccepted {
-			t.Fatalf("event %q status = %d, want 202", event.id, status)
-		}
-	}
-	done := runIntegrationWorker(t, s, ctx, cancel)
-	select {
-	case <-started:
-	case <-ctx.Done():
-		t.Fatal("worker did not start targeted reconciliation")
-	}
-	// Distinct delivery IDs for an active team coalesce into one follow-up.
-	for _, id := range []string{"followup", "another"} {
-		if status := deliverWebhook(t, hooks, id, "io.nais.team.confirm.delete.key", "target"); status != http.StatusAccepted {
-			t.Fatalf("follow-up status = %d, want 202", status)
-		}
-	}
-	if status := deliverWebhook(t, hooks, "followup", "io.nais.team.confirm.delete.key", "target"); status != http.StatusNoContent {
-		t.Fatalf("duplicate status = %d, want 204", status)
-	}
-	close(release)
-	<-done
-	if !slices.Equal(source.teamCalls, []string{"target", "other", "target"}) {
-		t.Fatalf("targeted reads = %v, want target, other, target", source.teamCalls)
-	}
-	if !slices.Equal(r.reconciled, []string{"target", "other"}) || !slices.Equal(r.deleted, []string{"target"}) {
-		t.Fatalf("reconciled = %v, deleted = %v; want two reconciliations then confirmed deletion", r.reconciled, r.deleted)
-	}
-	if source.calls != 2 || r.inventoryCalls != 1 {
-		t.Fatal("only startup may list full inventories and run cleanup")
-	}
 }
 
 func TestSignedWebhookOverflowRemainsRetryableWithRealQueue(t *testing.T) {

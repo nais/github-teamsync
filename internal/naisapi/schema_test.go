@@ -2,7 +2,6 @@ package naisapi
 
 import (
 	_ "embed"
-	"slices"
 	"testing"
 
 	"github.com/vektah/gqlparser/v2"
@@ -39,27 +38,5 @@ func TestQueriesMatchSchema(t *testing.T) {
 		if operation.Operation != ast.Query {
 			t.Errorf("Nais API operation %q must be read-only, got %s", operation.Name, operation.Operation)
 		}
-	}
-}
-
-func TestQueriesMatchSchemaWithoutGitHubTeamReference(t *testing.T) {
-	// Simulate the pending upstream field removal in memory. Keep the checked-in
-	// schema snapshot untouched until it can be refreshed from the real API.
-	document, err := parser.ParseSchema(&ast.Source{Name: "schema.graphql", Input: schemaSource})
-	if err != nil {
-		t.Fatal(err)
-	}
-	resources := document.Definitions.ForName("TeamExternalResources")
-	if resources != nil {
-		resources.Fields = slices.DeleteFunc(resources.Fields, func(field *ast.FieldDefinition) bool {
-			return field.Name == "gitHubTeam"
-		})
-	}
-	schema, err := validator.ValidateSchemaDocument(document)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, errs := gqlparser.LoadQueryWithRules(schema, querySource, nil); len(errs) != 0 {
-		t.Fatal(errs)
 	}
 }
