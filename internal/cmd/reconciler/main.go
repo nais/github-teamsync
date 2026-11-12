@@ -50,7 +50,7 @@ func Run(ctx context.Context) error {
 		defer cancel()
 		_ = mp.Shutdown(shutdownCtx)
 	}()
-	httpClient, err := githubauth.New(ctx, cfg, nil)
+	httpClient, err := githubauth.New(ctx, cfg, http.DefaultTransport)
 	if err != nil {
 		return fmt.Errorf("GitHub authentication for %q: %w", cfg.GitHubOrganization, err)
 	}
