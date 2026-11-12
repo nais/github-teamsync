@@ -64,11 +64,6 @@ func newRouter(registry prometheus.Gatherer, webhookHandler http.Handler) http.H
 	router.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	if webhookHandler == nil {
-		webhookHandler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			http.Error(w, "Nais API webhook receiver is disabled", http.StatusServiceUnavailable)
-		})
-	}
 	router.Handle("POST /webhooks/nais", webhookHandler)
 	return router
 }

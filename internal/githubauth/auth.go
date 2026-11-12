@@ -17,9 +17,6 @@ import (
 // New discovers an organization installation using the App's JWT, then uses
 // automatically refreshed, installation-scoped tokens.
 func New(ctx context.Context, cfg *config.Config, transport http.RoundTripper) (*http.Client, error) {
-	if transport == nil {
-		transport = http.DefaultTransport
-	}
 	key, err := os.ReadFile(cfg.GitHubPrivateKeyFile)
 	if err != nil {
 		return nil, fmt.Errorf("read GitHub App key: %w", err)

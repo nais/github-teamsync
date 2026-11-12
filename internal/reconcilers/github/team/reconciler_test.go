@@ -138,10 +138,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Return(&github.IDPGroupList{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(org, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		reconciler := github_team_reconciler.New(org, teamsService, graphClient)
 
 		if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -164,12 +161,9 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 		teamsService.EXPECT().GetTeamBySlug(ctx, org, teamSlug).
 			Return(nil, &github.Response{Response: &http.Response{StatusCode: http.StatusNotFound}}, nil).Times(2)
 
-		reconciler, err := github_team_reconciler.New(org, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		reconciler := github_team_reconciler.New(org, teamsService, graphClient)
 
-		if err = reconciler.Reconcile(ctx, nil, naisTeam, log); err == nil || !strings.Contains(err.Error(), "unable to create GitHub team") {
+		if err := reconciler.Reconcile(ctx, nil, naisTeam, log); err == nil || !strings.Contains(err.Error(), "unable to create GitHub team") {
 			t.Fatalf("expected error")
 		}
 	})
@@ -207,10 +201,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			Return(&github.IDPGroupList{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(org, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		reconciler := github_team_reconciler.New(org, teamsService, graphClient)
 
 		if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -342,10 +333,7 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 			Once().
 			Return(nil)
 
-		reconciler, err := github_team_reconciler.New(org, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		reconciler := github_team_reconciler.New(org, teamsService, graphClient)
 
 		if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -372,10 +360,7 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 			}, nil).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(org, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		reconciler := github_team_reconciler.New(org, teamsService, graphClient)
 
 		if err := reconciler.Reconcile(ctx, nil, naisTeam, log); err == nil || !strings.Contains(err.Error(), "server error from GitHub: 418") {
 			t.Fatalf("unexpected error: %v", err)
@@ -403,10 +388,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 		teamsService.EXPECT().GetTeamBySlug(ctx, org, "nais-teams").
 			Return(nil, &github.Response{Response: &http.Response{StatusCode: http.StatusNotFound}}, nil).Once()
 
-		reconciler, err := github_team_reconciler.New(org, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		reconciler := github_team_reconciler.New(org, teamsService, graphClient)
 
 		if err := reconciler.Delete(ctx, nil, naisTeam, log); err != nil {
 			t.Errorf("unexpected error: %v", err)
@@ -424,10 +406,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 			Return(nil, fmt.Errorf("some error")).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(org, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		reconciler := github_team_reconciler.New(org, teamsService, graphClient)
 
 		if err := reconciler.Delete(ctx, nil, naisTeam, log); err == nil || !strings.Contains(err.Error(), "delete GitHub team") {
 			t.Errorf("unexpected error: %v", err)
@@ -454,10 +433,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 			).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(org, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		reconciler := github_team_reconciler.New(org, teamsService, graphClient)
 
 		if err := reconciler.Delete(ctx, nil, naisTeam, log); err == nil || !strings.Contains(err.Error(), "unexpected server response from GitHub") {
 			t.Errorf("unexpected error: %v", err)
@@ -484,10 +460,7 @@ func TestGitHubReconciler_Delete(t *testing.T) {
 			).
 			Once()
 
-		reconciler, err := github_team_reconciler.New(org, github_team_reconciler.WithTeamsService(teamsService), github_team_reconciler.WithGraphClient(graphClient))
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		reconciler := github_team_reconciler.New(org, teamsService, graphClient)
 
 		if err := reconciler.Delete(ctx, nil, naisTeam, log); err != nil {
 			t.Errorf("unexpected error: %v", err)

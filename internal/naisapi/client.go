@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/Khan/genqlient/graphql"
 )
@@ -30,9 +29,6 @@ type workloadClient struct {
 // New uses a rotating workload identity token file. An empty path is supported
 // only for a loopback HTTP nais api proxy, which supplies its own authentication.
 func New(endpoint, tokenPath string, client *http.Client) *Client {
-	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
-	}
 	copyClient := *client
 	copyClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return &Client{graphql: graphql.NewClient(endpoint, &workloadClient{tokenPath: tokenPath, http: &copyClient})}

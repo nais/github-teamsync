@@ -23,38 +23,24 @@ const (
 
 type OptFunc func(*githubTeamReconciler)
 
-func WithTeamsService(teamsService TeamsService) OptFunc {
-	return func(r *githubTeamReconciler) {
-		r.teamsService = teamsService
-	}
-}
-
-func WithGraphClient(graphClient GraphClient) OptFunc {
-	return func(r *githubTeamReconciler) {
-		r.graphClient = graphClient
-	}
-}
-
 func WithDryRun(dryRun bool) OptFunc {
 	return func(r *githubTeamReconciler) {
 		r.dryRun = dryRun
 	}
 }
 
-func New(org string, opts ...OptFunc) (reconcilers.Reconciler, error) {
+func New(org string, teamsService TeamsService, graphClient GraphClient, opts ...OptFunc) reconcilers.Reconciler {
 	r := &githubTeamReconciler{
-		org: org,
+		org:          org,
+		teamsService: teamsService,
+		graphClient:  graphClient,
 	}
 
 	for _, opt := range opts {
 		opt(r)
 	}
 
-	if r.teamsService == nil || r.graphClient == nil {
-		return nil, fmt.Errorf("authenticated GitHub REST and GraphQL clients are required")
-	}
-
-	return r, nil
+	return r
 }
 
 func (r *githubTeamReconciler) Reconcile(ctx context.Context, source reconcilers.TeamSource, naisTeam *naisapi.Team, log *slog.Logger) error {
