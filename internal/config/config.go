@@ -11,7 +11,7 @@ import (
 )
 
 type Config struct {
-	NaisAPIURL                  string        `env:"NAIS_API_URL,required"`
+	NaisAPIURL                  *url.URL      `env:"NAIS_API_URL,required"`
 	NaisServiceAccountTokenPath string        `env:"NAIS_SERVICE_ACCOUNT_TOKEN_PATH"`
 	GitHubOrganization          string        `env:"GITHUB_ORG,required"`
 	GitHubAppID                 int64         `env:"GITHUB_APP_ID,required"`
@@ -33,27 +33,28 @@ func New(ctx context.Context, lookuper envconfig.Lookuper) (*Config, error) {
 	if err := envconfig.ProcessWith(ctx, &envconfig.Config{Target: cfg, Lookuper: lookuper}); err != nil {
 		return nil, err
 	}
-	if !validAPIURL(cfg.NaisAPIURL) {
-		return nil, fmt.Errorf("NAIS_API_URL must be an HTTPS GraphQL URL (HTTP allowed only on loopback), without credentials, query or fragment")
+	if cfg.NaisAPIURL == nil || cfg.NaisAPIURL.String() == "" {
+		return nil, fmt.Errorf("NAIS_API_URL is required")
 	}
-	u, _ := url.Parse(cfg.NaisAPIURL) // Already validated, including loopback-only HTTP.
-	if cfg.NaisServiceAccountTokenPath == "" && u.Scheme != "http" {
+	u := cfg.NaisAPIURL
+	loopbackHTTP := u.Scheme == "http" && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" || u.Hostname() == "::1")
+	if cfg.NaisServiceAccountTokenPath == "" && !loopbackHTTP {
 		return nil, fmt.Errorf("NAIS_SERVICE_ACCOUNT_TOKEN_PATH is required for Nais API workload authentication; use nais api proxy on loopback HTTP for local development")
 	}
 	if cfg.NaisServiceAccountTokenPath != "" && strings.TrimSpace(cfg.NaisServiceAccountTokenPath) == "" {
 		return nil, fmt.Errorf("NAIS_SERVICE_ACCOUNT_TOKEN_PATH must not be blank")
 	}
-	if cfg.ListenAddress == "" || cfg.SyncInterval <= 0 || cfg.SyncTimeout <= 0 || cfg.TeamTimeout <= 0 {
-		return nil, fmt.Errorf("listen address and positive sync intervals/timeouts are required")
+	if cfg.ListenAddress == "" {
+		return nil, fmt.Errorf("LISTEN_ADDRESS must not be empty")
+	}
+	if cfg.SyncInterval <= 0 || cfg.SyncTimeout <= 0 || cfg.TeamTimeout <= 0 {
+		return nil, fmt.Errorf("sync intervals/timeouts must be positive")
 	}
 	if cfg.SyncWorkers <= 0 {
 		return nil, fmt.Errorf("SYNC_WORKERS must be positive")
 	}
 	if (cfg.WebhookSecret == "") != (cfg.WebhookSource == "") {
 		return nil, fmt.Errorf("WEBHOOK_SECRET and WEBHOOK_SOURCE must be configured together")
-	}
-	if cfg.WebhookSecret != "" && len(cfg.WebhookSecret) < 32 {
-		return nil, fmt.Errorf("WEBHOOK_SECRET must be at least 32 bytes")
 	}
 	if cfg.GitHubOrganization == "" || strings.TrimSpace(cfg.GitHubOrganization) != cfg.GitHubOrganization || strings.ContainsAny(cfg.GitHubOrganization, "/\\ \t\r\n,") {
 		return nil, fmt.Errorf("GITHUB_ORG must name a single GitHub organization")
@@ -65,21 +66,4 @@ func New(ctx context.Context, lookuper envconfig.Lookuper) (*Config, error) {
 		return nil, fmt.Errorf("GITHUB_APP_PRIVATE_KEY_FILE must not be blank")
 	}
 	return cfg, nil
-}
-
-func validAPIURL(value string) bool {
-	u, err := url.Parse(value)
-	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return false
-	}
-	switch u.Scheme {
-	case "https":
-		return true
-	case "http":
-		switch u.Hostname() {
-		case "localhost", "127.0.0.1", "::1":
-			return true
-		}
-	}
-	return false
 }
