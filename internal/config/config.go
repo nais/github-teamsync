@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
 	"time"
@@ -23,8 +24,8 @@ type Config struct {
 	SyncWorkers                 int           `env:"SYNC_WORKERS,default=5"`
 	DryRun                      bool          `env:"DRY_RUN,default=false"`
 	LogFormat                   string        `env:"LOG_FORMAT,default=json"`
-	LogLevel                    string        `env:"LOG_LEVEL,default=info"`
-	WebhookSecret               string        `env:"WEBHOOK_SECRET"`
+	LogLevel                    slog.Level    `env:"LOG_LEVEL,default=info"`
+	WebhookSecret               []byte        `env:"WEBHOOK_SECRET"`
 	WebhookSource               string        `env:"WEBHOOK_SOURCE"`
 }
 
@@ -53,7 +54,7 @@ func New(ctx context.Context, lookuper envconfig.Lookuper) (*Config, error) {
 	if cfg.SyncWorkers <= 0 {
 		return nil, fmt.Errorf("SYNC_WORKERS must be positive")
 	}
-	if (cfg.WebhookSecret == "") != (cfg.WebhookSource == "") {
+	if (len(cfg.WebhookSecret) == 0) != (cfg.WebhookSource == "") {
 		return nil, fmt.Errorf("WEBHOOK_SECRET and WEBHOOK_SOURCE must be configured together")
 	}
 	if cfg.GitHubOrganization == "" || strings.TrimSpace(cfg.GitHubOrganization) != cfg.GitHubOrganization || strings.ContainsAny(cfg.GitHubOrganization, "/\\ \t\r\n,") {

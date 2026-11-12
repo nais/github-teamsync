@@ -105,7 +105,7 @@ func TestSignedWebhooksDriveConcurrentAPIReadsAndOneDeletionFollowup(t *testing.
 	s, _, _ := newTestSyncer()
 	s.Client, s.Queue, s.Workers = client, NewTeamQueue(), 5
 	s.Timeout, s.TeamTimeout = 10*time.Second, 5*time.Second
-	hooks := webhook.New(integrationWebhookSecret, integrationWebhookSource, s.Queue.Enqueue, s.Log)
+	hooks := webhook.New([]byte(integrationWebhookSecret), integrationWebhookSource, s.Queue.Enqueue, s.Log)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	var mu sync.Mutex
@@ -240,7 +240,7 @@ func TestSignedWebhooksWaitForFullPoolAndCleanup(t *testing.T) {
 	s, _, _ := newTestSyncer()
 	s.Client, s.Queue, s.Workers = client, NewTeamQueue(), 2
 	s.Timeout, s.TeamTimeout = 10*time.Second, 5*time.Second
-	hooks := webhook.New(integrationWebhookSecret, integrationWebhookSource, s.Queue.Enqueue, s.Log)
+	hooks := webhook.New([]byte(integrationWebhookSecret), integrationWebhookSource, s.Queue.Enqueue, s.Log)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	var fullActive, targeted, deleted atomic.Int32

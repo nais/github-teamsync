@@ -14,7 +14,7 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	log, err := New("json", "info")
+	log, err := New("json", slog.LevelInfo)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +25,7 @@ func TestNew(t *testing.T) {
 
 func TestJSONOutput(t *testing.T) {
 	var output bytes.Buffer
-	log, err := newLogger("JSON", "debug", &output)
+	log, err := newLogger("JSON", slog.LevelDebug, &output)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestJSONOutput(t *testing.T) {
 
 func TestTextOutput(t *testing.T) {
 	var output bytes.Buffer
-	log, err := newLogger("TEXT", "info", &output)
+	log, err := newLogger("TEXT", slog.LevelInfo, &output)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestLevels(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var output bytes.Buffer
-			log, err := newLogger("json", tc.name, &output)
+			log, err := newLogger("json", tc.level, &output)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -95,15 +95,13 @@ func TestLevels(t *testing.T) {
 
 func TestInvalidConfiguration(t *testing.T) {
 	for _, tc := range []struct {
-		format, level, want string
+		format, want string
 	}{
-		{"invalid", "info", "invalid log format"},
-		{"", "info", "invalid log format"},
-		{"json", "invalid", "invalid log level"},
-		{"json", "", "invalid log level"},
+		{"invalid", "invalid log format"},
+		{"", "invalid log format"},
 	} {
-		t.Run(tc.format+"/"+tc.level, func(t *testing.T) {
-			log, err := newLogger(tc.format, tc.level, io.Discard)
+		t.Run(tc.format, func(t *testing.T) {
+			log, err := newLogger(tc.format, slog.LevelInfo, io.Discard)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("expected %q error, got %v", tc.want, err)
 			}
