@@ -151,41 +151,6 @@ func TestFailedTeamLookupNeverReturnsDesiredState(t *testing.T) {
 	}
 }
 
-func TestTargetedLookupReopensWorkloadToken(t *testing.T) {
-	path := testTokenFile(t, "first-token")
-	var calls atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		want := "Bearer first-token"
-		if calls.Add(1) == 2 {
-			want = "Bearer rotated-token"
-		}
-		if got := r.Header.Get("Authorization"); got != want {
-			t.Errorf("authorization = %q, want %q", got, want)
-		}
-		_, _ = io.WriteString(w, `{"data":{"team":{"slug":"one"}}}`)
-	}))
-	defer server.Close()
-	c := New(server.URL, path, server.Client())
-	if _, err := c.Team(t.Context(), "one"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte("rotated-token"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := c.Team(t.Context(), "one"); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(path); err != nil {
-		t.Fatal(err)
-	}
-	if team, err := c.Team(t.Context(), "one"); err == nil || team != nil {
-		t.Fatalf("missing token must fail closed, got %v, %v", team, err)
-	}
-	if got := calls.Load(); got != 2 {
-		t.Errorf("requests = %d, want 2; token failure must not make a request", got)
-	}
-}
-
 func TestMembersPagination(t *testing.T) {
 	calls := 0
 	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
@@ -359,6 +324,11 @@ func TestWorkloadTokenIsReopenedForEveryRequestAndPage(t *testing.T) {
 				t.Errorf("authorization = %q, want Bearer membership-request-token", got)
 			}
 			_, _ = io.WriteString(w, `{"data":{"team":{"members":{"nodes":[],"pageInfo":{"hasNextPage":false}}}}}`)
+		case 4:
+			if got := r.Header.Get("Authorization"); got != "Bearer targeted-request-token" {
+				t.Errorf("authorization = %q, want Bearer targeted-request-token", got)
+			}
+			_, _ = io.WriteString(w, `{"data":{"team":{"slug":"one"}}}`)
 		default:
 			t.Error("unexpected request")
 		}
@@ -383,8 +353,20 @@ func TestWorkloadTokenIsReopenedForEveryRequestAndPage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := calls.Load(); got != 3 {
-		t.Errorf("requests = %d, want 3", got)
+	if err := os.WriteFile(path, []byte("targeted-request-token"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Team(t.Context(), "one"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if team, err := c.Team(t.Context(), "one"); err == nil || team != nil {
+		t.Fatalf("missing token must fail closed, got %v, %v", team, err)
+	}
+	if got := calls.Load(); got != 4 {
+		t.Errorf("requests = %d, want 4; token failure must not make a request", got)
 	}
 }
 

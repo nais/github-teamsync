@@ -264,6 +264,9 @@ func TestCleanupProtectsNewTeamsByNaisSlug(t *testing.T) {
 	if !slices.Equal(r.deleted, []string{"orphan"}) {
 		t.Fatalf("deleted = %v; existing and new Nais team slugs must be protected", r.deleted)
 	}
+	if source.calls != 2 {
+		t.Errorf("source calls = %d, want initial inventory and cleanup refresh", source.calls)
+	}
 }
 
 func TestCleanupStopsOnDeletionFailure(t *testing.T) {

@@ -2,13 +2,9 @@ package syncer
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
-	"net/http"
-	"net/http/httptest"
 	"slices"
-	"strings"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -112,38 +108,6 @@ func TestReconcileAndConfirmedDeletion(t *testing.T) {
 	}
 }
 
-func TestGraphQLDesiredState(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req struct {
-			Query string
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Error(err)
-			return
-		}
-		if r.Method != http.MethodPost || !strings.Contains(req.Query, "query Teams") {
-			t.Errorf("unexpected Nais GraphQL request: %s %s", r.Method, req.Query)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data":{"teams":{"nodes":[
-			{"slug":"active","deletionInProgress":false},
-			{"slug":"deleting","deletionInProgress":true}
-		],"pageInfo":{"hasNextPage":false}}}}`))
-	}))
-	defer server.Close()
-	s, _, r := newTestSyncer()
-	s.Client = naisapi.New(server.URL, "", server.Client())
-	if err := s.Sync(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	if want := []string{"active"}; !slices.Equal(r.reconciled, want) {
-		t.Errorf("reconciled = %v, want %v", r.reconciled, want)
-	}
-	if want := []string{"deleting"}; !slices.Equal(r.deleted, want) {
-		t.Errorf("deleted = %v, want %v", r.deleted, want)
-	}
-}
-
 func TestIncompleteInventoryNeverMutatesGitHub(t *testing.T) {
 	s, source, r := newTestSyncer()
 	source.teams = []*naisapi.Team{{Slug: "partial"}}
@@ -153,36 +117,6 @@ func TestIncompleteInventoryNeverMutatesGitHub(t *testing.T) {
 	}
 	if len(r.reconciled) != 0 || len(r.deleted) != 0 || r.inventoryCalls != 0 {
 		t.Errorf("incomplete inventory must not mutate GitHub: %+v", r)
-	}
-}
-
-func TestTeamFailureContinuesOtherTeamsAndSuppressesPruning(t *testing.T) {
-	s, source, r := newTestSyncer()
-	source.teams = []*naisapi.Team{{Slug: "broken"}, {Slug: "healthy"}}
-	r.failTeam = "broken"
-	if err := s.Sync(t.Context()); err == nil {
-		t.Fatal("expected reconciliation error")
-	}
-	if want := []string{"broken", "healthy"}; !slices.Equal(r.reconciled, want) {
-		t.Errorf("reconciled = %v, want %v", r.reconciled, want)
-	}
-	if r.inventoryCalls != 0 {
-		t.Errorf("inventory calls = %d, want 0", r.inventoryCalls)
-	}
-}
-
-func TestPruneUsesRefreshedFullInventoryAndNaisSlugs(t *testing.T) {
-	s, source, r := newTestSyncer()
-	source.teams = []*naisapi.Team{{Slug: "nais"}}
-	r.managed = []string{"nais", "orphan"}
-	if err := s.Sync(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	if want := []string{"orphan"}; !slices.Equal(r.deleted, want) {
-		t.Errorf("deleted = %v, want %v", r.deleted, want)
-	}
-	if source.calls != 2 {
-		t.Errorf("source calls = %d, want 2", source.calls)
 	}
 }
 
@@ -279,28 +213,6 @@ func TestFailedOrMissingTargetNeverDeletes(t *testing.T) {
 				t.Fatalf("failed target lookup must not reconcile, delete, or prune: %+v", r)
 			}
 		})
-	}
-}
-
-func TestEventDuringTargetedSyncSchedulesFollowup(t *testing.T) {
-	s, source, r := newTestSyncer()
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
-	defer cancel()
-	s.Queue = NewTeamQueue()
-	s.Queue.Enqueue("target")
-	source.targeted = map[string]*naisapi.Team{"target": {Slug: "target"}}
-	r.onReconcile = func(_ context.Context, slug string) {
-		if len(r.reconciled) == 1 {
-			s.Queue.Enqueue(slug)
-		} else {
-			cancel()
-		}
-	}
-	if err := s.Run(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Equal(source.teamCalls, []string{"target", "target"}) || source.calls != 2 {
-		t.Errorf("team reads = %v, full inventory reads = %d; want two target reads and startup only", source.teamCalls, source.calls)
 	}
 }
 

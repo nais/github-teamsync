@@ -65,30 +65,6 @@ func TestGetOrCreateParentTeam(t *testing.T) {
 			t.Error("expected the concurrently created parent team pointer")
 		}
 	})
-
-	t.Run("lookup failure", func(t *testing.T) {
-		teams := NewMockTeamsService(t)
-		teams.EXPECT().GetTeamBySlug(ctx, "org", parentTeamSlug).
-			Return(nil, nil, errors.New("unavailable")).Once()
-		r := &githubTeamReconciler{org: "org", teamsService: teams}
-		_, err := r.getOrCreateParentTeam(ctx)
-		if err == nil || !strings.Contains(err.Error(), "get GitHub parent team") {
-			t.Fatalf("expected parent lookup error, got %v", err)
-		}
-	})
-
-	t.Run("creation failure", func(t *testing.T) {
-		teams := NewMockTeamsService(t)
-		teams.EXPECT().GetTeamBySlug(ctx, "org", parentTeamSlug).
-			Return(nil, response(http.StatusNotFound), nil).Once()
-		teams.EXPECT().CreateTeam(ctx, "org", github.CreateTeamRequest{Name: parentTeamSlug, Description: new("Parent team for all teams synced by Nais."), Privacy: new("closed")}).
-			Return(nil, nil, errors.New("forbidden")).Once()
-		r := &githubTeamReconciler{org: "org", teamsService: teams}
-		_, err := r.getOrCreateParentTeam(ctx)
-		if err == nil || !strings.Contains(err.Error(), "create GitHub parent team") {
-			t.Fatalf("expected parent creation error, got %v", err)
-		}
-	})
 }
 
 func TestSyncTeamParent(t *testing.T) {

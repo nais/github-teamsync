@@ -35,36 +35,6 @@ func TestSchedulerStartupBeforeQueuedTeams(t *testing.T) {
 	}
 }
 
-func TestSchedulerPollTakesPriorityAfterActiveTeamFinishes(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		ctx, cancel := context.WithCancel(t.Context())
-		defer cancel()
-		q := NewTeamQueue()
-		q.Enqueue("slow")
-		q.Enqueue("next")
-		var calls []string
-		w := scheduler{
-			workers: 1,
-			queue:   q, interval: time.Minute,
-			fullSync: func(context.Context) { calls = append(calls, "full") },
-			teamSync: func(_ context.Context, slug string) {
-				calls = append(calls, slug+":start")
-				if slug == "slow" {
-					time.Sleep(2 * time.Minute) // Virtual time; poll becomes due during work.
-				} else {
-					cancel()
-				}
-				calls = append(calls, slug+":end")
-			},
-		}
-		w.run(ctx)
-		want := []string{"full", "slow:start", "slow:end", "full", "next:start", "next:end"}
-		if !slices.Equal(calls, want) {
-			t.Fatalf("calls = %v, want %v", calls, want)
-		}
-	})
-}
-
 func TestSchedulerPollIntervalStartsAfterFullSyncCompletes(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())

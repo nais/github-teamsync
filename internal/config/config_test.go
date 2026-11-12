@@ -161,29 +161,23 @@ func TestInvalidGitHubAuthentication(t *testing.T) {
 	}
 }
 
-func TestWebhookSecretHasNoMinimumLength(t *testing.T) {
-	env := validEnv()
-	env["WEBHOOK_SECRET"] = "x"
-	env["WEBHOOK_SOURCE"] = "https://example.com/api"
-	cfg, err := New(t.Context(), envconfig.MapLookuper(env))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(cfg.WebhookSecret, []byte(env["WEBHOOK_SECRET"])) {
-		t.Fatal("webhook secret was not preserved")
-	}
-}
-
 func TestWebhookSecretPreservesRawBytes(t *testing.T) {
-	env := validEnv()
-	env["WEBHOOK_SECRET"] = " \tsecret,with:delimiters+/=\næøå "
-	env["WEBHOOK_SOURCE"] = "https://example.com/api"
-	cfg, err := New(t.Context(), envconfig.MapLookuper(env))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(cfg.WebhookSecret, []byte(env["WEBHOOK_SECRET"])) {
-		t.Fatal("webhook secret was not preserved")
+	for _, tc := range []struct{ name, secret string }{
+		{"short", "x"},
+		{"special bytes", " \tsecret,with:delimiters+/=\næøå "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := validEnv()
+			env["WEBHOOK_SECRET"] = tc.secret
+			env["WEBHOOK_SOURCE"] = "https://example.com/api"
+			cfg, err := New(t.Context(), envconfig.MapLookuper(env))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(cfg.WebhookSecret, []byte(tc.secret)) {
+				t.Fatal("webhook secret was not preserved")
+			}
+		})
 	}
 }
 
