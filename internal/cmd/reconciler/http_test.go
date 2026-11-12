@@ -1,16 +1,22 @@
 package reconciler
 
 import (
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/nais/nais-github-teamsync/internal/webhook"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
 func TestHTTPRoutes(t *testing.T) {
-	router := newRouter(prometheus.NewRegistry(), nil)
+	hooks := webhook.New(nil, "", func(string) bool {
+		t.Fatal("disabled webhook receiver must not enqueue work")
+		return false
+	}, slog.New(slog.DiscardHandler))
+	router := newRouter(prometheus.NewRegistry(), hooks)
 	for _, tc := range []struct {
 		method, path string
 		status       int

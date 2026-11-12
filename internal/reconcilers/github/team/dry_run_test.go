@@ -94,10 +94,7 @@ func TestDryRunExistingTeam(t *testing.T) {
 	teams.EXPECT().ListTeamMembersBySlug(ctx, "org", "child", mock.Anything).
 		Return([]*github.User{{Login: new("old-user")}}, previewResponse(http.StatusOK), nil).Once()
 	expectPreviewIdentity(graph, 1)
-	r, err := New("org", WithTeamsService(teams), WithGraphClient(graph), WithDryRun(true))
-	if err != nil {
-		t.Fatal(err)
-	}
+	r := New("org", teams, graph, WithDryRun(true))
 	log, output := previewLog()
 	if err := r.Reconcile(ctx, &previewSource{members: []*naisapi.Member{{Email: "new@example.com"}}}, &naisapi.Team{Slug: "child", Purpose: "new purpose"}, log); err != nil {
 		t.Fatal(err)
@@ -121,10 +118,7 @@ func TestDryRunMissingTeamsUsesFreshPlanEachTime(t *testing.T) {
 	teams.EXPECT().GetTeamBySlug(ctx, "org", parentTeamSlug).Return(nil, previewResponse(http.StatusNotFound), nil).Twice()
 	teams.EXPECT().GetTeamBySlug(ctx, "org", "child").Return(nil, previewResponse(http.StatusNotFound), nil).Twice()
 	expectPreviewIdentity(graph, 2)
-	r, err := New("org", WithTeamsService(teams), WithGraphClient(graph), WithDryRun(true))
-	if err != nil {
-		t.Fatal(err)
-	}
+	r := New("org", teams, graph, WithDryRun(true))
 	for range 2 {
 		log, output := previewLog()
 		if err := r.Reconcile(ctx, &previewSource{members: []*naisapi.Member{{Email: "new@example.com"}}}, &naisapi.Team{Slug: "child", Purpose: "purpose"}, log); err != nil {
@@ -149,12 +143,9 @@ func TestDryRunDeletionAndOwnership(t *testing.T) {
 			teams.EXPECT().GetTeamBySlug(ctx, "org", "child").Return(&github.Team{
 				Slug: new("child"), Parent: &github.Team{ID: &parentID},
 			}, previewResponse(http.StatusOK), nil).Once()
-			r, err := New("org", WithTeamsService(teams), WithGraphClient(graph), WithDryRun(true))
-			if err != nil {
-				t.Fatal(err)
-			}
+			r := New("org", teams, graph, WithDryRun(true))
 			log, output := previewLog()
-			err = r.Delete(ctx, nil, &naisapi.Team{Slug: "child"}, log)
+			err := r.Delete(ctx, nil, &naisapi.Team{Slug: "child"}, log)
 			if owned {
 				if err != nil {
 					t.Fatal(err)
@@ -179,10 +170,7 @@ func TestDryRunMissingParentCannotAdoptExistingTeam(t *testing.T) {
 	child := &github.Team{Slug: new("child"), Parent: &github.Team{ID: new(int64(math.MaxInt64))}}
 	teams.EXPECT().GetTeamBySlug(ctx, "org", parentTeamSlug).Return(nil, previewResponse(http.StatusNotFound), nil).Once()
 	teams.EXPECT().GetTeamBySlug(ctx, "org", "child").Return(child, previewResponse(http.StatusOK), nil).Once()
-	r, err := New("org", WithTeamsService(teams), WithGraphClient(graph), WithDryRun(true))
-	if err != nil {
-		t.Fatal(err)
-	}
+	r := New("org", teams, graph, WithDryRun(true))
 	log, output := previewLog()
 	if err := r.Reconcile(ctx, nil, &naisapi.Team{Slug: "child"}, log); err == nil {
 		t.Fatal("expected ownership safeguard error")
@@ -205,10 +193,7 @@ func TestDryRunInaccessibleSAMLPreventsMembershipPlan(t *testing.T) {
 	teams.EXPECT().ListTeamMembersBySlug(ctx, "org", "child", mock.Anything).
 		Return([]*github.User{{Login: new("old-user")}}, previewResponse(http.StatusOK), nil).Once()
 	graph.EXPECT().Query(ctx, mock.Anything, mock.Anything).Return(nil).Once()
-	r, err := New("org", WithTeamsService(teams), WithGraphClient(graph), WithDryRun(true))
-	if err != nil {
-		t.Fatal(err)
-	}
+	r := New("org", teams, graph, WithDryRun(true))
 	log, output := previewLog()
 	if err := r.Reconcile(ctx, &previewSource{members: []*naisapi.Member{{Email: "new@example.com"}}}, &naisapi.Team{Slug: "child"}, log); err == nil {
 		t.Fatal("expected SAML safeguard error")
@@ -226,10 +211,7 @@ func TestDryRunPreviewsOrphanCleanup(t *testing.T) {
 		Return([]*github.Team{{Slug: new("orphan"), Parent: parent}}, previewResponse(http.StatusOK), nil).Once()
 	teams.EXPECT().GetTeamBySlug(mock.Anything, "org", "orphan").
 		Return(&github.Team{Slug: new("orphan"), Parent: parent}, previewResponse(http.StatusOK), nil).Once()
-	r, err := New("org", WithTeamsService(teams), WithGraphClient(graph), WithDryRun(true))
-	if err != nil {
-		t.Fatal(err)
-	}
+	r := New("org", teams, graph, WithDryRun(true))
 	log, output := previewLog()
 	s := &syncer.Syncer{Client: &previewSource{}, Reconciler: r, Log: log, Workers: 1, Timeout: time.Minute, TeamTimeout: time.Second}
 	if err := s.Sync(ctx); err != nil {
@@ -260,10 +242,7 @@ func TestOrphanCleanupRechecksOwnershipBeforeDeletion(t *testing.T) {
 			// Neither live nor dry-run mode may proceed with its deletion.
 			teams.EXPECT().GetTeamBySlug(mock.Anything, "org", "orphan").
 				Return(&github.Team{Slug: new("orphan"), Parent: &github.Team{ID: new(int64(999))}}, previewResponse(http.StatusOK), nil).Once()
-			r, err := New("org", WithTeamsService(teams), WithGraphClient(graph), WithDryRun(dryRun))
-			if err != nil {
-				t.Fatal(err)
-			}
+			r := New("org", teams, graph, WithDryRun(dryRun))
 			log, output := previewLog()
 			s := &syncer.Syncer{Client: &previewSource{}, Reconciler: r, Log: log, Workers: 1, Timeout: time.Minute, TeamTimeout: time.Second}
 			if err := s.Sync(t.Context()); err == nil {
@@ -279,10 +258,7 @@ func TestOrphanCleanupRechecksOwnershipBeforeDeletion(t *testing.T) {
 func TestDryRunProtectsReservedParent(t *testing.T) {
 	teams := NewMockTeamsService(t)
 	graph := NewMockGraphClient(t)
-	r, err := New("org", WithTeamsService(teams), WithGraphClient(graph), WithDryRun(true))
-	if err != nil {
-		t.Fatal(err)
-	}
+	r := New("org", teams, graph, WithDryRun(true))
 	log, output := previewLog()
 	if err := r.Delete(t.Context(), nil, &naisapi.Team{Slug: parentTeamSlug}, log); err == nil {
 		t.Fatal("expected reserved-parent safeguard error")

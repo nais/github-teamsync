@@ -50,7 +50,7 @@ func Run(ctx context.Context) error {
 		defer cancel()
 		_ = mp.Shutdown(shutdownCtx)
 	}()
-	httpClient, err := githubauth.New(ctx, cfg, nil)
+	httpClient, err := githubauth.New(ctx, cfg, http.DefaultTransport)
 	if err != nil {
 		return fmt.Errorf("GitHub authentication for %q: %w", cfg.GitHubOrganization, err)
 	}
@@ -58,10 +58,7 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	r, err := githubteams.New(cfg.GitHubOrganization, githubteams.WithTeamsService(restClient.Teams), githubteams.WithGraphClient(githubv4.NewClient(httpClient)), githubteams.WithDryRun(cfg.DryRun))
-	if err != nil {
-		return fmt.Errorf("create GitHub reconciler for %q: %w", cfg.GitHubOrganization, err)
-	}
+	r := githubteams.New(cfg.GitHubOrganization, restClient.Teams, githubv4.NewClient(httpClient), githubteams.WithDryRun(cfg.DryRun))
 	queue := syncer.NewTeamQueue()
 	s := &syncer.Syncer{
 		Client:       client,

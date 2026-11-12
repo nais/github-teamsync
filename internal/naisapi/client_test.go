@@ -484,7 +484,7 @@ func TestNonProxyEndpointsRequireWorkloadToken(t *testing.T) {
 	for _, endpoint := range []string{"https://console.example.com/graphql", "https://localhost/graphql", "http://remote.example.com/graphql"} {
 		t.Run(endpoint, func(t *testing.T) {
 			// Authentication fails before any network request is attempted.
-			c := New(endpoint, "", nil)
+			c := New(endpoint, "", &http.Client{})
 			teams, err := c.Teams(t.Context())
 			if err == nil || !strings.Contains(err.Error(), "workload identity token path is required") {
 				t.Fatalf("expected missing workload token error, got %v", err)
