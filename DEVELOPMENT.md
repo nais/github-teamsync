@@ -251,9 +251,6 @@ to Nais API; normal generation and tests continue using the checked-in snapshot.
 
 ## Dependency maintenance
 
-Dependabot checks Go modules, GitHub Actions, and Docker weekly, with a seven-day
-cooldown for version updates. Security updates are not delayed by that cooldown.
-
 ```sh
 mise run update:tools
 mise run actions:update        # refresh pins within declared version tags
