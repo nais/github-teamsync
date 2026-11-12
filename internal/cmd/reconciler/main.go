@@ -36,7 +36,7 @@ func Run(ctx context.Context) error {
 	slog.SetDefault(log)
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
-	client := naisapi.New(cfg.NaisAPIURL, cfg.NaisServiceAccountTokenPath, &http.Client{
+	client := naisapi.New(cfg.NaisAPIURL.String(), cfg.NaisServiceAccountTokenPath, &http.Client{
 		Timeout:       30 * time.Second,
 		Transport:     otelhttp.NewTransport(http.DefaultTransport),
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },

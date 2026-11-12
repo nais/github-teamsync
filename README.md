@@ -71,7 +71,7 @@ Configuration comes from environment variables, not command-line flags.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `NAIS_API_URL` | Required | HTTPS Nais GraphQL endpoint. |
+| `NAIS_API_URL` | Required | Nais GraphQL endpoint. |
 | `NAIS_SERVICE_ACCOUNT_TOKEN_PATH` | Injected by Nais | Rotating workload-token file; do not set it in the manifest. |
 | `GITHUB_ORG` | Required | Single target organization. |
 | `GITHUB_APP_ID` | Required | Positive numeric App ID. |
@@ -84,7 +84,7 @@ Configuration comes from environment variables, not command-line flags.
 | `TEAM_TIMEOUT` | `2m` | Per-team operation deadline, including targeted webhook reads. |
 | `LOG_FORMAT` | `json` | `json` or `text`. |
 | `LOG_LEVEL` | `info` | Slog level: `debug`, `info`, `warn`, `error`, or an offset such as `INFO+2`. |
-| `WEBHOOK_SECRET` | Unset | Signing secret, at least 32 bytes; set with `WEBHOOK_SOURCE`. |
+| `WEBHOOK_SECRET` | Unset | Signing secret; set with `WEBHOOK_SOURCE`. |
 | `WEBHOOK_SOURCE` | Unset | Exact expected CloudEvents source, e.g. `https://<tenant-domain>/api`. |
 
 **Start with `DRY_RUN=true`.** It previews team creation/updates, membership changes,

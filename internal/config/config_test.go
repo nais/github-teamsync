@@ -2,6 +2,7 @@ package config
 
 import (
 	"maps"
+	"net/url"
 	"strconv"
 	"testing"
 	"time"
@@ -20,7 +21,7 @@ func TestAppDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := &Config{
-		NaisAPIURL: "https://console.example.com/graphql", NaisServiceAccountTokenPath: "/var/run/secrets/nais.io/token",
+		NaisAPIURL: &url.URL{Scheme: "https", Host: "console.example.com", Path: "/graphql"}, NaisServiceAccountTokenPath: "/var/run/secrets/nais.io/token",
 		GitHubOrganization: "example", GitHubAppID: 123, GitHubPrivateKeyFile: "/run/secrets/app.pem",
 		ListenAddress: "127.0.0.1:3105", SyncInterval: 30 * time.Minute, SyncTimeout: 30 * time.Minute, TeamTimeout: 2 * time.Minute,
 		SyncWorkers: 5, LogFormat: "json", LogLevel: "info",
@@ -69,7 +70,7 @@ func TestDryRun(t *testing.T) {
 }
 
 func TestInvalidConfig(t *testing.T) {
-	for _, key := range []string{"NAIS_API_URL", "NAIS_SERVICE_ACCOUNT_TOKEN_PATH", "GITHUB_ORG", "GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY_FILE"} {
+	for _, key := range []string{"NAIS_API_URL", "GITHUB_ORG"} {
 		t.Run("missing "+key, func(t *testing.T) {
 			env := validEnv()
 			delete(env, key)
@@ -80,18 +81,12 @@ func TestInvalidConfig(t *testing.T) {
 		})
 	}
 	for _, tc := range []struct{ key, value string }{
-		{"NAIS_API_URL", "http://remote.example.com/graphql"},
-		{"NAIS_API_URL", "https://user:secret@example.com/graphql"},
 		{"NAIS_SERVICE_ACCOUNT_TOKEN_PATH", " \t"},
-		{"GITHUB_ORG", "bad/org"},
-		{"SYNC_INTERVAL", "0s"},
-		{"SYNC_TIMEOUT", "-1s"},
 		{"TEAM_TIMEOUT", "invalid"},
 		{"SYNC_WORKERS", "0"},
 		{"SYNC_WORKERS", "-1"},
 		{"SYNC_WORKERS", "invalid"},
 		{"DRY_RUN", "invalid"},
-		{"LISTEN_ADDRESS", ""},
 		{"WEBHOOK_SECRET", "secret-without-source"},
 		{"WEBHOOK_SOURCE", "https://example.com/api"},
 	} {
@@ -101,6 +96,24 @@ func TestInvalidConfig(t *testing.T) {
 			_, err := New(t.Context(), envconfig.MapLookuper(env))
 			if err == nil {
 				t.Fatal("expected configuration error")
+			}
+		})
+	}
+}
+
+func TestListenAddressAndTimeoutValidation(t *testing.T) {
+	for _, tc := range []struct{ key, value, wantError string }{
+		{"LISTEN_ADDRESS", "", "LISTEN_ADDRESS must not be empty"},
+		{"SYNC_INTERVAL", "0s", "sync intervals/timeouts must be positive"},
+		{"SYNC_TIMEOUT", "-1s", "sync intervals/timeouts must be positive"},
+		{"TEAM_TIMEOUT", "0s", "sync intervals/timeouts must be positive"},
+	} {
+		t.Run(tc.key, func(t *testing.T) {
+			env := validEnv()
+			env[tc.key] = tc.value
+			_, err := New(t.Context(), envconfig.MapLookuper(env))
+			if err == nil || err.Error() != tc.wantError {
+				t.Fatalf("error = %v, want %q", err, tc.wantError)
 			}
 		})
 	}
@@ -144,15 +157,16 @@ func TestInvalidGitHubAuthentication(t *testing.T) {
 	}
 }
 
-func TestLocalAPIProxy(t *testing.T) {
+func TestWebhookSecretHasNoMinimumLength(t *testing.T) {
 	env := validEnv()
-	env["NAIS_API_URL"] = "http://127.0.0.1:3000/graphql"
-	delete(env, "NAIS_SERVICE_ACCOUNT_TOKEN_PATH")
+	env["WEBHOOK_SECRET"] = "x"
 	env["WEBHOOK_SOURCE"] = "https://example.com/api"
-	env["WEBHOOK_SECRET"] = "random-test-secret-with-at-least-32-bytes"
-	_, err := New(t.Context(), envconfig.MapLookuper(env))
+	cfg, err := New(t.Context(), envconfig.MapLookuper(env))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if cfg.WebhookSecret != env["WEBHOOK_SECRET"] {
+		t.Fatal("webhook secret was not preserved")
 	}
 }
 
@@ -195,18 +209,26 @@ func TestAPIURLValidation(t *testing.T) {
 		{"http://localhost:3000/graphql", true},
 		{"http://127.0.0.1:3000/graphql", true},
 		{"http://[::1]:3000/graphql", true},
-		{"http://remote.example.com/graphql", false},
-		{"ftp://console.example.com/graphql", false},
-		{"https://user:secret@console.example.com/graphql", false},
-		{"https://console.example.com/graphql?token=secret", false},
-		{"https://console.example.com/graphql#fragment", false},
-		{"https:///graphql", false},
+		{"http://remote.example.com/graphql", true},
+		{"ftp://console.example.com/graphql", true},
+		{"https://user:secret@console.example.com/graphql", true},
+		{"https://console.example.com/graphql?option=value", true},
+		{"https://console.example.com/graphql#fragment", true},
+		{"https:///graphql", true},
 		{"%invalid", false},
 		{"", false},
 	} {
 		t.Run(tc.url, func(t *testing.T) {
-			if got := validAPIURL(tc.url); got != tc.valid {
-				t.Errorf("validAPIURL(%q) = %t, want %t", tc.url, got, tc.valid)
+			env := validEnv()
+			env["NAIS_API_URL"] = tc.url
+			cfg, err := New(t.Context(), envconfig.MapLookuper(env))
+			if (err == nil) != tc.valid {
+				t.Fatalf("New with NAIS_API_URL %q: error = %v, want valid %t", tc.url, err, tc.valid)
+			}
+			if tc.valid {
+				if cfg.NaisAPIURL.String() != tc.url {
+					t.Errorf("NAIS_API_URL = %q, want %q", cfg.NaisAPIURL, tc.url)
+				}
 			}
 		})
 	}

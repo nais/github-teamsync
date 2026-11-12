@@ -30,7 +30,7 @@ Nais injects a short-lived token file and `NAIS_SERVICE_ACCOUNT_TOKEN_PATH`. Do 
 override the path, mount your own Kubernetes service-account token, or copy token
 contents into a Secret. The client reopens the file for every request/page and
 never falls back to cached credentials. No write permission or internal gRPC access
-is needed. HTTPS is required outside the loopback HTTP proxy used for development.
+is needed.
 
 An incomplete/filtered team inventory is unsafe for cleanup. Verify that the
 service account sees the full inventory before setting `DRY_RUN=false`.
@@ -174,8 +174,7 @@ Check that contract against the API version you deploy.
 
 Set both:
 
-- `WEBHOOK_SECRET`: a random signing secret of at least 32 bytes, for example
-  generated with `openssl rand -hex 32`.
+- `WEBHOOK_SECRET`: the signing secret managed by the webhook provider.
 - `WEBHOOK_SOURCE`: the exact expected CloudEvents source,
   `https://<TENANT_DOMAIN>/api`. It identifies the event source, not the receiver URL.
 
