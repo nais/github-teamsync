@@ -67,7 +67,7 @@ func runIntegrationWorker(t *testing.T, s *Syncer, ctx context.Context, cancel c
 func TestSignedWebhooksQueueSerialFreshReadsAndDeletionFollowup(t *testing.T) {
 	s, source, r := newTestSyncer()
 	s.Queue = NewTeamQueue()
-	hooks := webhook.New(integrationWebhookSecret, integrationWebhookSource, s.Queue.Enqueue, s.Log)
+	hooks := webhook.New([]byte(integrationWebhookSecret), integrationWebhookSource, s.Queue.Enqueue, s.Log)
 	source.targeted = map[string]*naisapi.Team{
 		"target": {Slug: "target"},
 		"other":  {Slug: "other"},
@@ -139,7 +139,7 @@ func TestSignedWebhookOverflowRemainsRetryableWithRealQueue(t *testing.T) {
 			t.Fatalf("queue rejected team %d before capacity", i)
 		}
 	}
-	hooks := webhook.New(integrationWebhookSecret, integrationWebhookSource, s.Queue.Enqueue, s.Log)
+	hooks := webhook.New([]byte(integrationWebhookSecret), integrationWebhookSource, s.Queue.Enqueue, s.Log)
 	for range 2 {
 		if status := deliverWebhook(t, hooks, "retry", "io.nais.team.updated", "overflow"); status != http.StatusServiceUnavailable {
 			t.Fatalf("overflow status = %d, want 503 on every rejected attempt", status)

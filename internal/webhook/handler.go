@@ -42,17 +42,18 @@ type eventData struct {
 }
 
 type Handler struct {
-	secret, source string
-	trigger        func(string) bool
-	log            *slog.Logger
-	now            func() time.Time
-	mu             sync.Mutex
-	seen           map[string]time.Time
+	secret  []byte
+	source  string
+	trigger func(string) bool
+	log     *slog.Logger
+	now     func() time.Time
+	mu      sync.Mutex
+	seen    map[string]time.Time
 }
 
 // trigger must enqueue without performing I/O. False requests a delivery retry;
 // the delivery is not deduplicated until the queue accepts it.
-func New(secret, source string, trigger func(string) bool, log *slog.Logger) *Handler {
+func New(secret []byte, source string, trigger func(string) bool, log *slog.Logger) *Handler {
 	return &Handler{secret: secret, source: source, trigger: trigger, log: log, now: time.Now, seen: make(map[string]time.Time)}
 }
 
@@ -62,7 +63,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if h.secret == "" || h.source == "" {
+	if len(h.secret) == 0 || h.source == "" {
 		http.Error(w, "Nais API webhook receiver is disabled", http.StatusServiceUnavailable)
 		return
 	}
@@ -124,7 +125,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(status)
 }
 
-func validSignature(secret string, headers []string, body []byte) bool {
+func validSignature(secret []byte, headers []string, body []byte) bool {
 	if len(headers) != 1 || !strings.HasPrefix(headers[0], "sha256=") {
 		return false
 	}
@@ -132,7 +133,7 @@ func validSignature(secret string, headers []string, body []byte) bool {
 	if err != nil || len(signature) != sha256.Size {
 		return false
 	}
-	mac := hmac.New(sha256.New, []byte(secret))
+	mac := hmac.New(sha256.New, secret)
 	_, _ = mac.Write(body)
 	return hmac.Equal(signature, mac.Sum(nil))
 }

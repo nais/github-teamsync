@@ -47,6 +47,7 @@ variables and must not load dotenv files at runtime.
 - Check the branch and working tree before editing. Use a descriptive task branch
   rather than a default/protected branch, and preserve unrelated changes.
 - Do not commit or push unless explicitly requested.
+- Use Conventional Commit messages, such as `refactor: use typed envconfig decoding`.
 - Read the implementation and its tests before changing behavior.
 - After mocked interfaces change, run `mise run generate`. Do not edit generated
   `mock_*.go` files by hand.

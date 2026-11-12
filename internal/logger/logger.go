@@ -9,16 +9,12 @@ import (
 )
 
 // New creates a new logger with the given format and level
-func New(format, level string) (*slog.Logger, error) {
+func New(format string, level slog.Level) (*slog.Logger, error) {
 	return newLogger(format, level, os.Stderr)
 }
 
-func newLogger(format, level string, output io.Writer) (*slog.Logger, error) {
-	var parsedLevel slog.Level
-	if err := parsedLevel.UnmarshalText([]byte(level)); err != nil {
-		return nil, fmt.Errorf("invalid log level %q: %w", level, err)
-	}
-	opts := &slog.HandlerOptions{Level: parsedLevel}
+func newLogger(format string, level slog.Level, output io.Writer) (*slog.Logger, error) {
+	opts := &slog.HandlerOptions{Level: level}
 
 	switch strings.ToLower(format) {
 	case "json":

@@ -54,7 +54,7 @@ func request(body string) *http.Request {
 func newTestHandler() (*Handler, *atomic.Int32) {
 	log := slog.New(slog.DiscardHandler)
 	var calls atomic.Int32
-	h := New(testSecret, testSource, func(string) bool { calls.Add(1); return true }, log)
+	h := New([]byte(testSecret), testSource, func(string) bool { calls.Add(1); return true }, log)
 	return h, &calls
 }
 
@@ -199,7 +199,7 @@ func TestDedupCacheExpiresAndIsBounded(t *testing.T) {
 
 func TestDisabledReceiver(t *testing.T) {
 	h, calls := newTestHandler()
-	h.secret = ""
+	h.secret = nil
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, request(payload(t, "io.nais.team.created", "id", time.Now())))
 	if w.Code != http.StatusServiceUnavailable {
@@ -214,7 +214,7 @@ func TestSchedulesOnlyTeamFromEventData(t *testing.T) {
 	for _, eventType := range []string{"io.nais.team.updated", "io.nais.team.member.added", "io.nais.team.member.removed", "io.nais.team.member.set.role"} {
 		t.Run(eventType, func(t *testing.T) {
 			var got string
-			h := New(testSecret, testSource, func(slug string) bool { got = slug; return true }, slog.New(slog.DiscardHandler))
+			h := New([]byte(testSecret), testSource, func(slug string) bool { got = slug; return true }, slog.New(slog.DiscardHandler))
 			body := payload(t, eventType, "id", time.Now())
 			body = strings.Replace(body, `"subject":"my-team/my-team"`, `"subject":"unrelated-subject"`, 1)
 			w := httptest.NewRecorder()
@@ -229,7 +229,7 @@ func TestSchedulesOnlyTeamFromEventData(t *testing.T) {
 func TestFullQueueDoesNotDeduplicateRejectedDelivery(t *testing.T) {
 	accept := false
 	calls := 0
-	h := New(testSecret, testSource, func(string) bool { calls++; return accept }, slog.New(slog.DiscardHandler))
+	h := New([]byte(testSecret), testSource, func(string) bool { calls++; return accept }, slog.New(slog.DiscardHandler))
 	body := payload(t, "io.nais.team.member.removed", "retry-id", time.Now())
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, request(body))

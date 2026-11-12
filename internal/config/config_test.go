@@ -1,6 +1,8 @@
 package config
 
 import (
+	"bytes"
+	"log/slog"
 	"maps"
 	"net/url"
 	"strconv"
@@ -24,7 +26,7 @@ func TestAppDefaults(t *testing.T) {
 		NaisAPIURL: &url.URL{Scheme: "https", Host: "console.example.com", Path: "/graphql"}, NaisServiceAccountTokenPath: "/var/run/secrets/nais.io/token",
 		GitHubOrganization: "example", GitHubAppID: 123, GitHubPrivateKeyFile: "/run/secrets/app.pem",
 		ListenAddress: "127.0.0.1:3105", SyncInterval: 30 * time.Minute, SyncTimeout: 30 * time.Minute, TeamTimeout: 2 * time.Minute,
-		SyncWorkers: 5, LogFormat: "json", LogLevel: "info",
+		SyncWorkers: 5, LogFormat: "json", LogLevel: slog.LevelInfo,
 	}
 	if diff := cmp.Diff(want, cfg); diff != "" {
 		t.Errorf("config mismatch (-want +got):\n%s", diff)
@@ -87,6 +89,8 @@ func TestInvalidConfig(t *testing.T) {
 		{"SYNC_WORKERS", "-1"},
 		{"SYNC_WORKERS", "invalid"},
 		{"DRY_RUN", "invalid"},
+		{"LOG_LEVEL", "invalid"},
+		{"LOG_LEVEL", ""},
 		{"WEBHOOK_SECRET", "secret-without-source"},
 		{"WEBHOOK_SOURCE", "https://example.com/api"},
 	} {
@@ -165,8 +169,46 @@ func TestWebhookSecretHasNoMinimumLength(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.WebhookSecret != env["WEBHOOK_SECRET"] {
+	if !bytes.Equal(cfg.WebhookSecret, []byte(env["WEBHOOK_SECRET"])) {
 		t.Fatal("webhook secret was not preserved")
+	}
+}
+
+func TestWebhookSecretPreservesRawBytes(t *testing.T) {
+	env := validEnv()
+	env["WEBHOOK_SECRET"] = " \tsecret,with:delimiters+/=\næøå "
+	env["WEBHOOK_SOURCE"] = "https://example.com/api"
+	cfg, err := New(t.Context(), envconfig.MapLookuper(env))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(cfg.WebhookSecret, []byte(env["WEBHOOK_SECRET"])) {
+		t.Fatal("webhook secret was not preserved")
+	}
+}
+
+func TestLogLevel(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		want  slog.Level
+	}{
+		{"debug", slog.LevelDebug},
+		{"INFO", slog.LevelInfo},
+		{"warn", slog.LevelWarn},
+		{"error", slog.LevelError},
+		{"DEBUG+2", slog.LevelDebug + 2},
+	} {
+		t.Run(tc.value, func(t *testing.T) {
+			env := validEnv()
+			env["LOG_LEVEL"] = tc.value
+			cfg, err := New(t.Context(), envconfig.MapLookuper(env))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.LogLevel != tc.want {
+				t.Errorf("log level = %v, want %v", cfg.LogLevel, tc.want)
+			}
+		})
 	}
 }
 
