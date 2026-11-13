@@ -2,7 +2,7 @@
 pin = true
 
 [env]
-_.file = { path = ".env", redact = true }
+_.file = { path = ".env" }
 
 [tools]
 "aqua:sethvargo/ratchet" = "0.12.0"

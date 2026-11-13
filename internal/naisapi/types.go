@@ -8,7 +8,7 @@ type Team struct {
 	DeletionInProgress bool
 }
 
-// Member contains the identity needed to resolve a Nais member in GitHub SAML.
+// Member contains the identity needed to resolve a Nais member in GitHub SSO.
 type Member struct {
 	Email string
 }

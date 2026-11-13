@@ -35,27 +35,63 @@ is needed.
 An incomplete/filtered team inventory is unsafe for cleanup. Verify that the
 service account sees the full inventory before setting `DRY_RUN=false`.
 
-## GitHub App and SAML access
+## GitHub authentication and SSO access
 
 Create your own App with **Organization permissions → Members: Read and write**,
 install it in `GITHUB_ORG`, and keep the installation unsuspended. Repository
 permissions are not required. Validate access to team CRUD, memberships, IdP group
-connections, and organization SAML external identities. Permission changes may
+connections, and, when selected, organization SAML external identities. Permission changes may
 require an organization owner to approve the updated grant.
 
-The service discovers the installation and refreshes installation access tokens
-automatically. You supply only the App ID and a readable PEM private-key file,
-not installation IDs, OAuth client secrets, or user logins. The key is read at
-startup; restart the workload after rotating it.
+The service discovers the organization installation and refreshes installation
+access tokens automatically. Supply the App ID and a readable PEM private-key
+file, not installation IDs or OAuth client secrets. The App remains required in
+all identity modes: the enterprise PAT never replaces it for team, membership,
+or IdP group operations. The key is read at startup; restart after rotating it.
 
-Identity resolution requires **organization-level SAML** with NameID/userName
-matching Nais member email addresses. Enterprise-level SAML identities are not
-supported. A missing/inaccessible provider or failed query stops that team's
-membership changes. A user with no linked identity is skipped with a warning;
+### Identity provider selection
+
+Select the provider explicitly with `GITHUB_IDENTITY_PROVIDER`:
+
+| Value | Identity query | Authentication |
+| --- | --- | --- |
+| `organization-saml` (default) | `organization.samlIdentityProvider.externalIdentities` | Organization App installation token. |
+| `enterprise-saml` | `enterprise.ownerInfo.samlIdentityProvider.externalIdentities` | Enterprise owner's classic PAT. |
+| `enterprise-oidc` | `enterprise.ownerInfo.oidcProvider.externalIdentities` | Enterprise owner's classic PAT. |
+
+All modes filter `externalIdentities` by `userName`, using the Nais member email,
+and read the linked GitHub login. SSO usernames/NameIDs must match Nais emails;
+public profile emails and organization-verified-domain emails are not used.
+Users do not need to register their work email as a GitHub account email.
+
+For enterprise SAML/OIDC, add these settings to the runtime Secret:
+
+```sh
+GITHUB_IDENTITY_PROVIDER=enterprise-saml # or enterprise-oidc
+GITHUB_ENTERPRISE=<enterprise-slug>
+GITHUB_ENTERPRISE_TOKEN=<enterprise-owner-classic-PAT>
+```
+
+Create the classic PAT from an **enterprise owner** account with the
+**`read:enterprise`** scope. Fine-grained PATs are not a replacement for this
+documented access path. Follow enterprise token policies and any applicable SSO
+authorization requirements. No enterprise App installation is needed for this
+mode. Keep the PAT in a runtime Secret, never in manifests, source control, or
+logs. Set an expiry, monitor lookup failures, rotate the token before expiry,
+and restart after rotation; the PAT is read from the environment at startup.
+The PAT client sends credentials only to GitHub's HTTPS GraphQL endpoint and
+does not follow redirects.
+
+`GITHUB_ENTERPRISE` and `GITHUB_ENTERPRISE_TOKEN` are required for enterprise
+modes and must be unset in organization mode. There is no automatic provider
+detection or credential fallback. Invalid combinations fail startup. A missing/
+inaccessible provider or failed query (including an expired or revoked PAT)
+stops that team's membership changes. A user with no linked identity is skipped with a warning;
 their existing GitHub membership can be removed if that login is not in the
 resolved desired set. Test this in a non-production organization.
 
-See [GitHub's external identity access documentation](https://docs.github.com/en/enterprise-cloud@latest/organizations/managing-membership-in-your-organization/exporting-member-information-for-your-organization).
+See [GitHub's enterprise identity provider reference](https://docs.github.com/en/enterprise-cloud@latest/graphql/reference/enterprise-admin#enterpriseidentityprovider)
+and [OIDC provider reference](https://docs.github.com/en/enterprise-cloud@latest/graphql/reference/enterprise-admin#oidcprovider).
 
 ## Manifests, secrets, and network access
 
@@ -63,7 +99,8 @@ See [GitHub's external identity access documentation](https://docs.github.com/en
    your repository. Set the namespace/team labels and select an image.
 2. Create a Nais Secret named **`nais-github-teamsync`**, exposed through `envFrom`.
    Supply `NAIS_API_URL`, `GITHUB_ORG`, `GITHUB_APP_ID`, and
-   `GITHUB_APP_PRIVATE_KEY_FILE`. Start with `DRY_RUN=true`. Other optional
+    `GITHUB_APP_PRIVATE_KEY_FILE`, plus enterprise identity settings when selected.
+    Start with `DRY_RUN=true`. Other optional
    configuration can also be Secret keys; omit both webhook keys for polling only.
 3. Create **`nais-github-teamsync-github-app`** with a `private-key.pem` key. Copy
    [`app.example.yaml`](../examples/nais/app.example.yaml) to
@@ -107,7 +144,7 @@ repository owns approval and rollout rules; this project does not run that workf
 ## Dry-run, scheduling, and deletion safety
 
 `DRY_RUN=true` logs proposed writes at INFO with `dry_run=true`, `operation`, and
-the affected team/user. Use `LOG_LEVEL=info` or `debug`. Reads and ownership/SAML
+the affected team/user. Use `LOG_LEVEL=info` or `debug`. Reads and ownership/SSO
 checks still run. The service continues full polling and handling targeted webhooks;
 temporary App installation tokens are still obtained. No team, membership, or IdP
 mapping writes are sent to GitHub. Simulated missing teams do not persist between

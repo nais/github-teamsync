@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/go-github/v93/github"
+	"github.com/nais/nais-github-teamsync/internal/config"
 	"github.com/shurcooL/githubv4"
 )
 
@@ -25,33 +26,48 @@ type TeamsService interface {
 
 // githubTeamReconciler creates teams on GitHub and connects users to them.
 type githubTeamReconciler struct {
-	teamsService TeamsService
-	graphClient  GraphClient
-	org          string
-	dryRun       bool
+	teamsService     TeamsService
+	graphClient      GraphClient
+	org              string
+	identityProvider config.IdentityProvider
+	enterprise       string
+	dryRun           bool
 }
 
 type GitHubUser struct {
 	Login githubv4.String
 }
 
-type ExternalIdentitySamlAttributes struct {
-	Username githubv4.String
-}
-
 type ExternalIdentity struct {
-	User         GitHubUser
-	SamlIdentity ExternalIdentitySamlAttributes
+	User GitHubUser
 }
 
-type SamlIdentityProvider struct {
-	ExternalIdentities struct {
-		Nodes []ExternalIdentity
-	} `graphql:"externalIdentities(first: 1, userName: $username)"`
+type ExternalIdentityProvider struct {
+	ExternalIdentities *ExternalIdentityConnection `graphql:"externalIdentities(first: 1, userName: $username)"`
+}
+
+type ExternalIdentityConnection struct {
+	Nodes []ExternalIdentity
 }
 
 type LookupGitHubSamlUserByEmail struct {
 	Organization struct {
-		SamlIdentityProvider *SamlIdentityProvider
+		SamlIdentityProvider *ExternalIdentityProvider
 	} `graphql:"organization(login: $org)"`
+}
+
+type LookupEnterpriseSAMLUserByEmail struct {
+	Enterprise struct {
+		OwnerInfo struct {
+			SamlIdentityProvider *ExternalIdentityProvider
+		}
+	} `graphql:"enterprise(slug: $enterprise)"`
+}
+
+type LookupEnterpriseOIDCUserByEmail struct {
+	Enterprise struct {
+		OwnerInfo struct {
+			OIDCProvider *ExternalIdentityProvider `graphql:"oidcProvider"`
+		}
+	} `graphql:"enterprise(slug: $enterprise)"`
 }

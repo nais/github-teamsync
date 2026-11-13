@@ -10,9 +10,9 @@ import (
 	"strings"
 
 	"github.com/google/go-github/v93/github"
+	"github.com/nais/nais-github-teamsync/internal/config"
 	"github.com/nais/nais-github-teamsync/internal/naisapi"
 	"github.com/nais/nais-github-teamsync/internal/reconcilers"
-	"github.com/shurcooL/githubv4"
 )
 
 var errGitHubUserNotFound = errors.New("GitHub user does not exist")
@@ -29,11 +29,19 @@ func WithDryRun(dryRun bool) OptFunc {
 	}
 }
 
+func WithIdentityProvider(provider config.IdentityProvider, enterprise string) OptFunc {
+	return func(r *githubTeamReconciler) {
+		r.identityProvider = provider
+		r.enterprise = enterprise
+	}
+}
+
 func New(org string, teamsService TeamsService, graphClient GraphClient, opts ...OptFunc) reconcilers.Reconciler {
 	r := &githubTeamReconciler{
-		org:          org,
-		teamsService: teamsService,
-		graphClient:  graphClient,
+		org:              org,
+		teamsService:     teamsService,
+		graphClient:      graphClient,
+		identityProvider: config.IdentityProviderOrganizationSAML,
 	}
 
 	for _, opt := range opts {
@@ -378,36 +386,6 @@ func (r *githubTeamReconciler) mapSSOUsers(ctx context.Context, members []*naisa
 	}
 
 	return userMap, nil
-}
-
-// getGitHubUsernameFromEmail Look up a GitHub username from an SSO e-mail address connected to that user account.
-func (r *githubTeamReconciler) getGitHubUsernameFromEmail(ctx context.Context, email string) (*string, error) {
-	var query LookupGitHubSamlUserByEmail
-
-	variables := map[string]any{
-		"org":      githubv4.String(r.org),
-		"username": githubv4.String(email),
-	}
-
-	err := r.graphClient.Query(ctx, &query, variables)
-	if err != nil {
-		return nil, err
-	}
-
-	if query.Organization.SamlIdentityProvider == nil {
-		return nil, fmt.Errorf("organization %q has no accessible organization-level SAML identity provider; refusing membership changes", r.org)
-	}
-	nodes := query.Organization.SamlIdentityProvider.ExternalIdentities.Nodes
-	if len(nodes) == 0 {
-		return nil, errGitHubUserNotFound
-	}
-
-	username := string(nodes[0].User.Login)
-	if len(username) == 0 {
-		return nil, errGitHubUserNotFound
-	}
-
-	return &username, nil
 }
 
 // httpError Return an error if the response status code is not as expected, or if the passed err is already set to an

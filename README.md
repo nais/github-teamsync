@@ -10,7 +10,7 @@ credentials. This project publishes images; it does not deploy a shared service.
 ## What it manages
 
 - A closed `nais-teams` parent and closed child teams with descriptions from Nais.
-- Memberships resolved from Nais emails through **organization-level GitHub SAML**.
+- Memberships resolved from Nais emails through GitHub organization SAML or enterprise SAML/OIDC identities.
 - Disconnection of existing GitHub IdP group mappings.
 - API-confirmed team deletions, plus orphan cleanup after successful full syncs.
 
@@ -25,8 +25,9 @@ managed children. Failed/partial inventories suppress cleanup.
 ## Get started on Nais
 
 1. Create a GitHub App with **Organization permissions → Members: Read and write**
-   and install it in the target organization. Organization-level SAML identities
-   must match Nais member emails; enterprise-level SAML is not supported.
+   and install it in the target organization. SSO usernames/NameIDs must match Nais
+   member emails. Enterprise SAML/OIDC additionally requires an enterprise owner's
+   classic PAT with `read:enterprise`; see [identity setup](docs/OPERATIONS.md#identity-provider-selection).
 2. Create a Nais API service account with permission to read the **full** team
    inventory, deletion status, and member emails.
 3. Copy [`examples/nais/app.yaml`](examples/nais/app.yaml) into your repository as
@@ -59,7 +60,7 @@ managed children. Failed/partial inventories suppress cleanup.
    `NAIS_SERVICE_ACCOUNT_TOKEN_PATH`; do not override it or copy its token into a
    Secret. The service rereads that file before every API request/page.
 
-Review dry-run logs, SAML mappings, and team ownership before setting
+Review dry-run logs, SSO mappings, and team ownership before setting
 `DRY_RUN=false`. GitHub App installation tokens refresh automatically; restart
 after rotating the App's private key.
 
@@ -74,6 +75,9 @@ Configuration comes from environment variables, not command-line flags.
 | `NAIS_API_URL` | Required | Nais GraphQL endpoint. |
 | `NAIS_SERVICE_ACCOUNT_TOKEN_PATH` | Injected by Nais | Rotating workload-token file; do not set it in the manifest. |
 | `GITHUB_ORG` | Required | Single target organization. |
+| `GITHUB_IDENTITY_PROVIDER` | `organization-saml` | `organization-saml`, `enterprise-saml`, or `enterprise-oidc`. |
+| `GITHUB_ENTERPRISE` | Unset | Enterprise slug; required for enterprise identity lookup. |
+| `GITHUB_ENTERPRISE_TOKEN` | Unset | Enterprise owner's classic PAT with `read:enterprise`; required only for enterprise identity lookup. |
 | `GITHUB_APP_ID` | Required | Positive numeric App ID. |
 | `GITHUB_APP_PRIVATE_KEY_FILE` | Required | Readable PEM private-key file. |
 | `DRY_RUN` | `false` | Log proposed GitHub resource writes without applying them. |
@@ -107,7 +111,7 @@ Keep `/healthz` and `/metrics` internal. Health indicates process liveness, not
 successful upstream sync. Metrics expose polling-cycle counts/durations labeled
 by organization and error. Review sync logs and webhook delivery history.
 
-An inaccessible SAML provider stops membership changes. A user without a linked
+An inaccessible SSO provider or failed identity query stops membership changes. A user without a linked
 identity is skipped and can lose an existing membership if their login is absent
 from the resolved desired set. Validate identity mapping before enabling writes.
 

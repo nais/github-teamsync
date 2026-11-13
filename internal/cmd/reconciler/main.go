@@ -58,7 +58,15 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	r := githubteams.New(cfg.GitHubOrganization, restClient.Teams, githubv4.NewClient(httpClient), githubteams.WithDryRun(cfg.DryRun))
+	identityClient := httpClient
+	if cfg.GitHubIdentityProvider != config.IdentityProviderOrganizationSAML {
+		identityClient, err = githubauth.NewEnterpriseIdentityClient(cfg.GitHubEnterpriseToken, http.DefaultTransport)
+		if err != nil {
+			return fmt.Errorf("GitHub enterprise identity authentication: %w", err)
+		}
+	}
+	r := githubteams.New(cfg.GitHubOrganization, restClient.Teams, githubv4.NewClient(identityClient),
+		githubteams.WithDryRun(cfg.DryRun), githubteams.WithIdentityProvider(cfg.GitHubIdentityProvider, cfg.GitHubEnterprise))
 	queue := syncer.NewTeamQueue()
 	s := &syncer.Syncer{
 		Client:       client,
@@ -73,7 +81,8 @@ func Run(ctx context.Context) error {
 	}
 	hooks := webhook.New(cfg.WebhookSecret, cfg.WebhookSource, queue.Enqueue, log)
 	log.InfoContext(ctx, "starting GitHub team sync", "interval", cfg.SyncInterval,
-		"workers", cfg.SyncWorkers, "dry_run", cfg.DryRun, "version", version)
+		"workers", cfg.SyncWorkers, "dry_run", cfg.DryRun, "identity_provider", cfg.GitHubIdentityProvider,
+		"enterprise", cfg.GitHubEnterprise, "version", version)
 	wg, ctx := errgroup.WithContext(ctx)
 	wg.Go(func() error { return runHttpServer(ctx, cfg.ListenAddress, registry, log, hooks) })
 	wg.Go(func() error { return s.Run(ctx) })
