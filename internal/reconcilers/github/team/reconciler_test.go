@@ -259,7 +259,7 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 			Query(mock.Anything, mock.Anything, map[string]any{"org": githubv4.String(org), "username": githubv4.String(keepEmail)}).
 			Run(func(_ context.Context, q any, v map[string]any) {
 				query := q.(*github_team_reconciler.LookupGitHubSamlUserByEmail)
-				query.Organization.SamlIdentityProvider = &github_team_reconciler.SamlIdentityProvider{}
+				query.Organization.SamlIdentityProvider = &github_team_reconciler.ExternalIdentityProvider{ExternalIdentities: &github_team_reconciler.ExternalIdentityConnection{}}
 				query.Organization.SamlIdentityProvider.ExternalIdentities.Nodes = []github_team_reconciler.ExternalIdentity{
 					{User: github_team_reconciler.GitHubUser{Login: keepLogin}},
 				}
@@ -270,7 +270,7 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 			Query(mock.Anything, mock.Anything, map[string]any{"org": githubv4.String(org), "username": githubv4.String(createEmail)}).
 			Run(func(_ context.Context, q any, v map[string]any) {
 				query := q.(*github_team_reconciler.LookupGitHubSamlUserByEmail)
-				query.Organization.SamlIdentityProvider = &github_team_reconciler.SamlIdentityProvider{}
+				query.Organization.SamlIdentityProvider = &github_team_reconciler.ExternalIdentityProvider{ExternalIdentities: &github_team_reconciler.ExternalIdentityConnection{}}
 				query.Organization.SamlIdentityProvider.ExternalIdentities.Nodes = []github_team_reconciler.ExternalIdentity{
 					{User: github_team_reconciler.GitHubUser{Login: createLogin}},
 				}

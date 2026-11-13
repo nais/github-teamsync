@@ -25,11 +25,77 @@ func TestAppDefaults(t *testing.T) {
 	want := &Config{
 		NaisAPIURL: &url.URL{Scheme: "https", Host: "console.example.com", Path: "/graphql"}, NaisServiceAccountTokenPath: "/var/run/secrets/nais.io/token",
 		GitHubOrganization: "example", GitHubAppID: 123, GitHubPrivateKeyFile: "/run/secrets/app.pem",
-		ListenAddress: "127.0.0.1:3105", SyncInterval: 30 * time.Minute, SyncTimeout: 30 * time.Minute, TeamTimeout: 2 * time.Minute,
+		GitHubIdentityProvider: IdentityProviderOrganizationSAML,
+		ListenAddress:          "127.0.0.1:3105", SyncInterval: 30 * time.Minute, SyncTimeout: 30 * time.Minute, TeamTimeout: 2 * time.Minute,
 		SyncWorkers: 5, LogFormat: "json", LogLevel: slog.LevelInfo,
 	}
 	if diff := cmp.Diff(want, cfg); diff != "" {
 		t.Errorf("config mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestEnterpriseIdentityConfig(t *testing.T) {
+	for _, provider := range []IdentityProvider{IdentityProviderEnterpriseSAML, IdentityProviderEnterpriseOIDC} {
+		t.Run(string(provider), func(t *testing.T) {
+			env := validEnv()
+			env["GITHUB_IDENTITY_PROVIDER"] = string(provider)
+			env["GITHUB_ENTERPRISE"] = "example-enterprise"
+			env["GITHUB_ENTERPRISE_TOKEN"] = "test-enterprise-pat"
+			cfg, err := New(t.Context(), envconfig.MapLookuper(env))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.GitHubIdentityProvider != provider || cfg.GitHubEnterprise != "example-enterprise" || cfg.GitHubEnterpriseToken != "test-enterprise-pat" {
+				t.Fatal("enterprise identity configuration was not preserved")
+			}
+			for _, key := range []string{"GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY_FILE", "GITHUB_ENTERPRISE", "GITHUB_ENTERPRISE_TOKEN"} {
+				t.Run("missing "+key, func(t *testing.T) {
+					missing := maps.Clone(env)
+					delete(missing, key)
+					if _, err := New(t.Context(), envconfig.MapLookuper(missing)); err == nil {
+						t.Fatal("expected missing configuration error")
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestInvalidIdentityConfig(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		env  map[string]string
+	}{
+		{"unknown provider", map[string]string{"GITHUB_IDENTITY_PROVIDER": "automatic"}},
+		{"empty provider", map[string]string{"GITHUB_IDENTITY_PROVIDER": ""}},
+		{"unused enterprise", map[string]string{"GITHUB_ENTERPRISE": "example"}},
+		{"unused PAT", map[string]string{"GITHUB_ENTERPRISE_TOKEN": "test-enterprise-pat"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := validEnv()
+			maps.Copy(env, tc.env)
+			if _, err := New(t.Context(), envconfig.MapLookuper(env)); err == nil {
+				t.Fatal("expected identity configuration error")
+			}
+		})
+	}
+	for _, key := range []string{"GITHUB_ENTERPRISE", "GITHUB_ENTERPRISE_TOKEN"} {
+		values := []string{"", " ", " leading", "trailing ", "has space", "line\nbreak", "tab\tvalue"}
+		if key == "GITHUB_ENTERPRISE" {
+			values = append(values, "bad/slug", `bad\slug`, "one,two")
+		}
+		for _, value := range values {
+			t.Run(key+value, func(t *testing.T) {
+				env := validEnv()
+				env["GITHUB_IDENTITY_PROVIDER"] = "enterprise-oidc"
+				env["GITHUB_ENTERPRISE"] = "example"
+				env["GITHUB_ENTERPRISE_TOKEN"] = "test-enterprise-pat"
+				env[key] = value
+				if _, err := New(t.Context(), envconfig.MapLookuper(env)); err == nil {
+					t.Fatal("expected identity configuration error")
+				}
+			})
+		}
 	}
 }
 

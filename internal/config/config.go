@@ -12,22 +12,33 @@ import (
 )
 
 type Config struct {
-	NaisAPIURL                  *url.URL      `env:"NAIS_API_URL,required"`
-	NaisServiceAccountTokenPath string        `env:"NAIS_SERVICE_ACCOUNT_TOKEN_PATH"`
-	GitHubOrganization          string        `env:"GITHUB_ORG,required"`
-	GitHubAppID                 int64         `env:"GITHUB_APP_ID,required"`
-	GitHubPrivateKeyFile        string        `env:"GITHUB_APP_PRIVATE_KEY_FILE,required"`
-	ListenAddress               string        `env:"LISTEN_ADDRESS,default=127.0.0.1:3105"`
-	SyncInterval                time.Duration `env:"SYNC_INTERVAL,default=30m"`
-	SyncTimeout                 time.Duration `env:"SYNC_TIMEOUT,default=30m"`
-	TeamTimeout                 time.Duration `env:"TEAM_TIMEOUT,default=2m"`
-	SyncWorkers                 int           `env:"SYNC_WORKERS,default=5"`
-	DryRun                      bool          `env:"DRY_RUN,default=false"`
-	LogFormat                   string        `env:"LOG_FORMAT,default=json"`
-	LogLevel                    slog.Level    `env:"LOG_LEVEL,default=info"`
-	WebhookSecret               []byte        `env:"WEBHOOK_SECRET"`
-	WebhookSource               string        `env:"WEBHOOK_SOURCE"`
+	NaisAPIURL                  *url.URL         `env:"NAIS_API_URL,required"`
+	NaisServiceAccountTokenPath string           `env:"NAIS_SERVICE_ACCOUNT_TOKEN_PATH"`
+	GitHubOrganization          string           `env:"GITHUB_ORG,required"`
+	GitHubIdentityProvider      IdentityProvider `env:"GITHUB_IDENTITY_PROVIDER,default=organization-saml"`
+	GitHubEnterprise            string           `env:"GITHUB_ENTERPRISE"`
+	GitHubEnterpriseToken       string           `env:"GITHUB_ENTERPRISE_TOKEN"`
+	GitHubAppID                 int64            `env:"GITHUB_APP_ID,required"`
+	GitHubPrivateKeyFile        string           `env:"GITHUB_APP_PRIVATE_KEY_FILE,required"`
+	ListenAddress               string           `env:"LISTEN_ADDRESS,default=127.0.0.1:3105"`
+	SyncInterval                time.Duration    `env:"SYNC_INTERVAL,default=30m"`
+	SyncTimeout                 time.Duration    `env:"SYNC_TIMEOUT,default=30m"`
+	TeamTimeout                 time.Duration    `env:"TEAM_TIMEOUT,default=2m"`
+	SyncWorkers                 int              `env:"SYNC_WORKERS,default=5"`
+	DryRun                      bool             `env:"DRY_RUN,default=false"`
+	LogFormat                   string           `env:"LOG_FORMAT,default=json"`
+	LogLevel                    slog.Level       `env:"LOG_LEVEL,default=info"`
+	WebhookSecret               []byte           `env:"WEBHOOK_SECRET"`
+	WebhookSource               string           `env:"WEBHOOK_SOURCE"`
 }
+
+type IdentityProvider string
+
+const (
+	IdentityProviderOrganizationSAML IdentityProvider = "organization-saml"
+	IdentityProviderEnterpriseSAML   IdentityProvider = "enterprise-saml"
+	IdentityProviderEnterpriseOIDC   IdentityProvider = "enterprise-oidc"
+)
 
 func New(ctx context.Context, lookuper envconfig.Lookuper) (*Config, error) {
 	cfg := &Config{}
@@ -65,6 +76,21 @@ func New(ctx context.Context, lookuper envconfig.Lookuper) (*Config, error) {
 	}
 	if strings.TrimSpace(cfg.GitHubPrivateKeyFile) == "" {
 		return nil, fmt.Errorf("GITHUB_APP_PRIVATE_KEY_FILE must not be blank")
+	}
+	switch cfg.GitHubIdentityProvider {
+	case IdentityProviderOrganizationSAML:
+		if cfg.GitHubEnterprise != "" || cfg.GitHubEnterpriseToken != "" {
+			return nil, fmt.Errorf("GITHUB_ENTERPRISE and GITHUB_ENTERPRISE_TOKEN require an enterprise identity provider")
+		}
+	case IdentityProviderEnterpriseSAML, IdentityProviderEnterpriseOIDC:
+		if cfg.GitHubEnterprise == "" || strings.TrimSpace(cfg.GitHubEnterprise) != cfg.GitHubEnterprise || strings.ContainsAny(cfg.GitHubEnterprise, "/\\ \t\r\n,") {
+			return nil, fmt.Errorf("GITHUB_ENTERPRISE must name a single enterprise slug for enterprise identity lookup")
+		}
+		if strings.TrimSpace(cfg.GitHubEnterpriseToken) == "" || strings.ContainsAny(cfg.GitHubEnterpriseToken, " \t\r\n") {
+			return nil, fmt.Errorf("GITHUB_ENTERPRISE_TOKEN must be a nonblank PAT without whitespace for enterprise identity lookup")
+		}
+	default:
+		return nil, fmt.Errorf("GITHUB_IDENTITY_PROVIDER must be organization-saml, enterprise-saml, or enterprise-oidc")
 	}
 	return cfg, nil
 }

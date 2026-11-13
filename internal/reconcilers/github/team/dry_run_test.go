@@ -77,7 +77,7 @@ func expectPreviewIdentity(graph *MockGraphClient, times int) {
 	graph.EXPECT().Query(mock.Anything, mock.Anything, map[string]any{"org": githubv4.String("org"), "username": githubv4.String("new@example.com")}).
 		Run(func(_ context.Context, q any, _ map[string]any) {
 			query := q.(*LookupGitHubSamlUserByEmail)
-			query.Organization.SamlIdentityProvider = &SamlIdentityProvider{}
+			query.Organization.SamlIdentityProvider = &ExternalIdentityProvider{ExternalIdentities: &ExternalIdentityConnection{}}
 			query.Organization.SamlIdentityProvider.ExternalIdentities.Nodes = []ExternalIdentity{{User: GitHubUser{Login: "new-user"}}}
 		}).Return(nil).Times(times)
 }

@@ -22,7 +22,7 @@ not in instructions for developers to install independently.
 | `internal/cmd/reconciler/` | Startup, HTTP routes, metrics, and shutdown. |
 | `internal/config/` | Environment configuration and validation. |
 | `internal/naisapi/` | Read-only Nais GraphQL client, queries, and schema snapshot. |
-| `internal/githubauth/` | GitHub App authentication and installation discovery. |
+| `internal/githubauth/` | GitHub App installation discovery and separate enterprise identity PAT authentication. |
 | `internal/reconcilers/github/team/` | Team ownership checks, reconciliation, and dry-run write previews. |
 | `internal/syncer/` | Full polls, a bounded/coalescing team queue, worker pools, and serial orphan cleanup. |
 | `internal/webhook/` | Signed Nais CloudEvents receiver. |
@@ -49,10 +49,11 @@ cp .env.example .env
 mise run local
 ```
 
-Mise loads the optional `.env` for tasks and `mise exec`, redacts its values from
-task output, and overrides matching shell environment variables. The service
-itself does not read dotenv files. To override a dotenv value for one execution,
-set it after Mise has constructed the environment:
+Mise loads the optional `.env` for tasks and `mise exec` and overrides matching
+shell environment variables. Values are not redacted from task output; avoid
+printing credentials or sharing logs containing secrets. The service itself does
+not read dotenv files. To override a dotenv value for one execution, set it after
+Mise has constructed the environment:
 
 ```sh
 mise exec -- env DRY_RUN=true go run .
@@ -199,8 +200,10 @@ These are correctness requirements, not optional optimizations:
   GitHub team references. A matching slug must not adopt or delete an unrelated
   team: verify direct parent ownership and protect the reserved `nais-teams` parent.
   Nested descendants are not orphans. Recheck ownership before each orphan deletion.
-- **Preserve SAML safeguards.** An inaccessible provider or failed identity query
-  must not cause membership removals.
+- **Preserve SSO safeguards.** An inaccessible provider or failed identity query
+  must not cause membership removals. Enterprise SAML/OIDC identity queries use
+  the enterprise PAT client; all organization reads/writes keep using the App
+  installation client. Never fall back between providers or credentials.
 - **Dry-run must not forward resource writes.** All team, membership, and IdP
   writes must pass through the preview boundary. Keep its interface explicit so
   adding a new method requires a forwarding decision. Simulated state must stay
