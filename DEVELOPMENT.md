@@ -309,12 +309,15 @@ To preview locally:
 mise exec -- git-cliff --offline --github-repo nais/nais-github-teamsync --bump --unreleased --strip all
 ```
 
-Publishing runs only for stable version tags (`vMAJOR.MINOR.PATCH`) or manual
-dispatch after checks/builds. To release the next git-cliff version, dispatch
-**Check, build and publish** on `main`. Alternatively, push a stable version tag
-on the commit to release; that version is used as-is. Manual dispatch with no
-unreleased Conventional Commits does not publish. Ordinary pushes to `main` and
-PRs only check, build, and preview; they do not publish or create tags.
+Pushes to `main` automatically publish the next git-cliff version after successful
+checks/builds, then create its GitHub release and version tag at the checked commit.
+Runs with no unreleased Conventional Commits do not publish. PRs only check, build,
+and preview; they do not publish or create tags.
+
+Manual dispatch of **Check, build and publish** also releases the next git-cliff
+version. Alternatively, push a stable version tag (`vMAJOR.MINOR.PATCH`) on the
+commit to release; that version is used as-is. Both paths require successful
+checks/builds.
 
 The publisher repository must set `NAIS_TEAM`, optionally `NAIS_TENANT` (default
 `nav`), and authorize the repository in Nais Console. `nais/docker-build-push`
@@ -325,11 +328,11 @@ uses the workflow's `GITHUB_TOKEN`, not runtime App credentials.
 
 The GHCR image tag and embedded binary version both omit the leading `v`. After
 image publishing succeeds, the workflow creates a GitHub release with git-cliff
-notes and the image reference. For manual dispatch, this also creates the version
-tag at the checked commit. The workflow token's tag creation does not trigger a
-second publishing run. No changelog file is committed. Release previews and notes
-are generated offline and need no GitHub API credentials. PR comment updates and
-release creation use the workflow token.
+notes and the image reference. For pushes to `main` and manual dispatch, this also
+creates the version tag at the checked commit. The workflow token's tag creation
+does not trigger a second publishing run. No changelog file is committed. Release
+previews and notes are generated offline and need no GitHub API credentials.
+PR comment updates and release creation use the workflow token.
 
 Keep `id-token: write` and `packages: write` confined to publishing, and
 `contents: write` confined to GitHub release creation. Grant `pull-requests: write`
