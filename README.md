@@ -26,8 +26,9 @@ managed children. Failed/partial inventories suppress cleanup.
 
 1. Create a GitHub App with **Organization permissions → Members: Read and write**
    and install it in the target organization. SSO usernames/NameIDs must match Nais
-   member emails. Enterprise SAML/OIDC additionally requires an enterprise owner's
-   classic PAT with `read:enterprise`; see [identity setup](docs/OPERATIONS.md#identity-provider-selection).
+   member emails. For enterprise SAML/OIDC, also install the same App on the
+   enterprise with **Enterprise single sign-on: Read-only**; see
+   [identity setup](docs/OPERATIONS.md#identity-provider-selection).
 2. Create a Nais API service account with permission to read the **full** team
    inventory, deletion status, and member emails.
 3. Copy [`examples/nais/app.yaml`](examples/nais/app.yaml) into your repository as
@@ -77,7 +78,6 @@ Configuration comes from environment variables, not command-line flags.
 | `GITHUB_ORG` | Required | Single target organization. |
 | `GITHUB_IDENTITY_PROVIDER` | `organization-saml` | `organization-saml`, `enterprise-saml`, or `enterprise-oidc`. |
 | `GITHUB_ENTERPRISE` | Unset | Enterprise slug; required for enterprise identity lookup. |
-| `GITHUB_ENTERPRISE_TOKEN` | Unset | Enterprise owner's classic PAT with `read:enterprise`; required only for enterprise identity lookup. |
 | `GITHUB_APP_ID` | Required | Positive numeric App ID. |
 | `GITHUB_APP_PRIVATE_KEY_FILE` | Required | Readable PEM private-key file. |
 | `DRY_RUN` | `false` | Log proposed GitHub resource writes without applying them. |

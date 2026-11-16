@@ -17,7 +17,7 @@ in `docs/OPERATIONS.md`.
   `generated.go` using genqlient. Use `mise run generate`; do not hand-edit generated
   code or the schema snapshot. Refresh the schema with
   `mise run update:nais-schema` (`nais api schema`), not the `nais/api` repository.
-- GitHub App and enterprise identity PAT authentication: `internal/githubauth/`.
+- GitHub App organization/enterprise installation authentication: `internal/githubauth/`.
 - GitHub reconciliation and ownership checks: `internal/reconcilers/github/team/`.
 - Single-organization polling and orphan cleanup: `internal/syncer/`.
 - Signed Nais CloudEvents receiver: `internal/webhook/`.
@@ -61,10 +61,11 @@ variables and must not load dotenv files at runtime.
   read-only. Do not introduce runtime Nais mutations, Pub/Sub dependencies, or
   shared lifecycle management. Consumers deploy the image from their own repositories
   and supply their own `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY_FILE`; no
-  centrally owned App is provided. Organization operations always use the App.
-  Enterprise SAML/OIDC identity reads require `GITHUB_ENTERPRISE` and an enterprise
-  owner's classic PAT in `GITHUB_ENTERPRISE_TOKEN`; never use it for organization
-  operations or fall back between credentials/providers.
+  centrally owned App or static-token authentication is provided. Organization
+  operations use the organization App installation. Enterprise SAML/OIDC identity
+  reads require `GITHUB_ENTERPRISE` and a separate enterprise installation of the
+  same App with read-only enterprise SSO permission. Never use the enterprise
+  token for organization operations or fall back between installations/providers.
 - Nais API authentication uses a workload binding. Reopen the file identified by
   `NAIS_SERVICE_ACCOUNT_TOKEN_PATH` before every request, including pagination;
   never cache its contents or fall back to static/previous credentials on failure.

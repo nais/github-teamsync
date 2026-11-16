@@ -17,7 +17,6 @@ type Config struct {
 	GitHubOrganization          string           `env:"GITHUB_ORG,required"`
 	GitHubIdentityProvider      IdentityProvider `env:"GITHUB_IDENTITY_PROVIDER,default=organization-saml"`
 	GitHubEnterprise            string           `env:"GITHUB_ENTERPRISE"`
-	GitHubEnterpriseToken       string           `env:"GITHUB_ENTERPRISE_TOKEN"`
 	GitHubAppID                 int64            `env:"GITHUB_APP_ID,required"`
 	GitHubPrivateKeyFile        string           `env:"GITHUB_APP_PRIVATE_KEY_FILE,required"`
 	ListenAddress               string           `env:"LISTEN_ADDRESS,default=127.0.0.1:3105"`
@@ -79,15 +78,12 @@ func New(ctx context.Context, lookuper envconfig.Lookuper) (*Config, error) {
 	}
 	switch cfg.GitHubIdentityProvider {
 	case IdentityProviderOrganizationSAML:
-		if cfg.GitHubEnterprise != "" || cfg.GitHubEnterpriseToken != "" {
-			return nil, fmt.Errorf("GITHUB_ENTERPRISE and GITHUB_ENTERPRISE_TOKEN require an enterprise identity provider")
+		if cfg.GitHubEnterprise != "" {
+			return nil, fmt.Errorf("GITHUB_ENTERPRISE requires an enterprise identity provider")
 		}
 	case IdentityProviderEnterpriseSAML, IdentityProviderEnterpriseOIDC:
 		if cfg.GitHubEnterprise == "" || strings.TrimSpace(cfg.GitHubEnterprise) != cfg.GitHubEnterprise || strings.ContainsAny(cfg.GitHubEnterprise, "/\\ \t\r\n,") {
 			return nil, fmt.Errorf("GITHUB_ENTERPRISE must name a single enterprise slug for enterprise identity lookup")
-		}
-		if strings.TrimSpace(cfg.GitHubEnterpriseToken) == "" || strings.ContainsAny(cfg.GitHubEnterpriseToken, " \t\r\n") {
-			return nil, fmt.Errorf("GITHUB_ENTERPRISE_TOKEN must be a nonblank PAT without whitespace for enterprise identity lookup")
 		}
 	default:
 		return nil, fmt.Errorf("GITHUB_IDENTITY_PROVIDER must be organization-saml, enterprise-saml, or enterprise-oidc")

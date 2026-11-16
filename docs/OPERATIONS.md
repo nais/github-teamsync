@@ -40,14 +40,14 @@ service account sees the full inventory before setting `DRY_RUN=false`.
 Create your own App with **Organization permissions → Members: Read and write**,
 install it in `GITHUB_ORG`, and keep the installation unsuspended. Repository
 permissions are not required. Validate access to team CRUD, memberships, IdP group
-connections, and, when selected, organization SAML external identities. Permission changes may
-require an organization owner to approve the updated grant.
+connections, and, when selected, organization SAML external identities. Permission
+changes may require an organization owner to approve the updated grant.
 
 The service discovers the organization installation and refreshes installation
 access tokens automatically. Supply the App ID and a readable PEM private-key
-file, not installation IDs or OAuth client secrets. The App remains required in
-all identity modes: the enterprise PAT never replaces it for team, membership,
-or IdP group operations. The key is read at startup; restart after rotating it.
+file, not installation IDs or OAuth client secrets. Team, membership, and IdP
+group operations always use the organization installation token. The key is read
+at startup; restart after rotating it.
 
 ### Identity provider selection
 
@@ -56,42 +56,46 @@ Select the provider explicitly with `GITHUB_IDENTITY_PROVIDER`:
 | Value | Identity query | Authentication |
 | --- | --- | --- |
 | `organization-saml` (default) | `organization.samlIdentityProvider.externalIdentities` | Organization App installation token. |
-| `enterprise-saml` | `enterprise.ownerInfo.samlIdentityProvider.externalIdentities` | Enterprise owner's classic PAT. |
-| `enterprise-oidc` | `enterprise.ownerInfo.oidcProvider.externalIdentities` | Enterprise owner's classic PAT. |
+| `enterprise-saml` | `enterprise.ownerInfo.samlIdentityProvider.externalIdentities` | Enterprise App installation token. |
+| `enterprise-oidc` | `enterprise.ownerInfo.oidcProvider.externalIdentities` | Enterprise App installation token. |
 
 All modes filter `externalIdentities` by `userName`, using the Nais member email,
 and read the linked GitHub login. SSO usernames/NameIDs must match Nais emails;
 public profile emails and organization-verified-domain emails are not used.
 Users do not need to register their work email as a GitHub account email.
 
-For enterprise SAML/OIDC, add these settings to the runtime Secret:
+For enterprise SAML/OIDC:
 
-```sh
-GITHUB_IDENTITY_PROVIDER=enterprise-saml # or enterprise-oidc
-GITHUB_ENTERPRISE=<enterprise-slug>
-GITHUB_ENTERPRISE_TOKEN=<enterprise-owner-classic-PAT>
-```
+1. Add **Enterprise permissions → Enterprise single sign-on: Read-only** to the
+   same App used for organization operations. No enterprise write or SCIM
+   permissions are needed for these queries.
+2. Install the App on the enterprise **and** the target organization. Registering
+   or owning the App at enterprise level is not the same as installing it there.
+   An enterprise installation does not grant organization access, and vice versa.
+3. Configure the provider and enterprise slug:
 
-Create the classic PAT from an **enterprise owner** account with the
-**`read:enterprise`** scope. Fine-grained PATs are not a replacement for this
-documented access path. Follow enterprise token policies and any applicable SSO
-authorization requirements. No enterprise App installation is needed for this
-mode. Keep the PAT in a runtime Secret, never in manifests, source control, or
-logs. Set an expiry, monitor lookup failures, rotate the token before expiry,
-and restart after rotation; the PAT is read from the environment at startup.
-The PAT client sends credentials only to GitHub's HTTPS GraphQL endpoint and
-does not follow redirects.
+   ```sh
+   GITHUB_IDENTITY_PROVIDER=enterprise-saml # or enterprise-oidc
+   GITHUB_ENTERPRISE=<enterprise-slug>
+   ```
 
-`GITHUB_ENTERPRISE` and `GITHUB_ENTERPRISE_TOKEN` are required for enterprise
-modes and must be unset in organization mode. There is no automatic provider
-detection or credential fallback. Invalid combinations fail startup. A missing/
-inaccessible provider or failed query (including an expired or revoked PAT)
-stops that team's membership changes. A user with no linked identity is skipped with a warning;
-their existing GitHub membership can be removed if that login is not in the
+Both installations use the same `GITHUB_APP_ID` and
+`GITHUB_APP_PRIVATE_KEY_FILE`. The service discovers the enterprise installation
+through `/enterprises/{enterprise}/installation`, verifies its enterprise slug,
+target type, and suspension status, then obtains and refreshes a separate
+installation token for identity queries. Missing, suspended, or mismatched
+installations fail startup. Neither client follows API redirects.
+
+`GITHUB_ENTERPRISE` is required for enterprise modes and must be unset in
+organization mode. There is no automatic provider detection or credential
+fallback. Invalid combinations fail startup. A missing/
+inaccessible provider or failed query stops that team's membership changes.
+A user with no linked identity is skipped with a warning; their existing GitHub
+membership can be removed if that login is not in the
 resolved desired set. Test this in a non-production organization.
 
-See [GitHub's enterprise identity provider reference](https://docs.github.com/en/enterprise-cloud@latest/graphql/reference/enterprise-admin#enterpriseidentityprovider)
-and [OIDC provider reference](https://docs.github.com/en/enterprise-cloud@latest/graphql/reference/enterprise-admin#oidcprovider).
+See [GitHub's enterprise SSO App permissions announcement](https://github.blog/changelog/2025-07-01-enterprise-level-access-for-github-apps-and-installation-automation-apis/#enterprise-sso-and-scim-management)
+and [enterprise App installation guide](https://docs.github.com/en/enterprise-cloud@latest/apps/using-github-apps/installing-a-github-app-on-your-enterprise).
 
 ## Manifests, secrets, and network access
 

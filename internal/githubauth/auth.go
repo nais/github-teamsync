@@ -17,18 +17,7 @@ import (
 // New discovers an organization installation using the App's JWT, then uses
 // automatically refreshed, installation-scoped tokens.
 func New(ctx context.Context, cfg *config.Config, transport http.RoundTripper) (*http.Client, error) {
-	key, err := os.ReadFile(cfg.GitHubPrivateKeyFile)
-	if err != nil {
-		return nil, fmt.Errorf("read GitHub App key: %w", err)
-	}
-	apps, err := ghinstallation.NewAppsTransport(transport, cfg.GitHubAppID, key)
-	if err != nil {
-		return nil, fmt.Errorf("parse GitHub App key: %w", err)
-	}
-	discovery, err := github.NewClient(github.WithHTTPClient(&http.Client{
-		Transport: apps, Timeout: 30 * time.Second,
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}))
+	discovery, key, err := newAppClient(cfg, transport)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +31,30 @@ func New(ctx context.Context, cfg *config.Config, transport http.RoundTripper) (
 	if !strings.EqualFold(installation.GetAccount().GetLogin(), cfg.GitHubOrganization) {
 		return nil, fmt.Errorf("GitHub returned an installation for a different account")
 	}
-	authenticated, err := ghinstallation.New(transport, cfg.GitHubAppID, installation.GetID(), key)
+	return newInstallationClient(cfg.GitHubAppID, installation.GetID(), key, transport)
+}
+
+func newAppClient(cfg *config.Config, transport http.RoundTripper) (*github.Client, []byte, error) {
+	key, err := os.ReadFile(cfg.GitHubPrivateKeyFile)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read GitHub App key: %w", err)
+	}
+	apps, err := ghinstallation.NewAppsTransport(transport, cfg.GitHubAppID, key)
+	if err != nil {
+		return nil, nil, fmt.Errorf("parse GitHub App key: %w", err)
+	}
+	discovery, err := github.NewClient(github.WithHTTPClient(&http.Client{
+		Transport: apps, Timeout: 30 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}))
+	if err != nil {
+		return nil, nil, err
+	}
+	return discovery, key, nil
+}
+
+func newInstallationClient(appID, installationID int64, key []byte, transport http.RoundTripper) (*http.Client, error) {
+	authenticated, err := ghinstallation.New(transport, appID, installationID, key)
 	if err != nil {
 		return nil, fmt.Errorf("create installation transport: %w", err)
 	}
