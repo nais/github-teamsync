@@ -6,6 +6,8 @@ request a fresh sync of just the affected team. Nais API is read-only.
 
 Run the published image from your own repository with your own manifests and
 credentials. This project publishes images; it does not deploy a shared service.
+See [releases](https://github.com/nais/nais-github-teamsync/releases) for versioned
+images and release notes.
 
 ## What it manages
 

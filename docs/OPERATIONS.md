@@ -13,8 +13,10 @@ there is no distributed lock.
 
 Select a published image accessible to your environment, preferably pinned by
 digest, such as `ghcr.io/nais/nais-github-teamsync@sha256:<published-digest>`.
-Version tags such as `v1.2.3` produce image tag `1.2.3`; manual builds use
-`sha.<commit>`. Package visibility/access must allow your environment to pull it.
+Releases use semantic versions: `v1.2.3` produces image tag `1.2.3`, including
+manually dispatched releases. See [GitHub releases](https://github.com/nais/nais-github-teamsync/releases)
+for release notes and image references. Package visibility/access must allow your
+environment to pull the image.
 If your platform requires images in your team's Nais registry, mirror the image
 following the [third-party image guide](https://docs.nais.io/workloads/how-to/upload-image/).
 
