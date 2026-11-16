@@ -13,6 +13,9 @@ concurrency:
 jobs:
   release-info:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     outputs:
       tag: ${{ steps.release-info.outputs.tag }}
       version: ${{ steps.release-info.outputs.version }}
@@ -23,6 +26,10 @@ jobs:
       - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # ratchet:jdx/mise-action@v5
       - id: release-info
         run: mise run ci:release-info
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
 
   check:
     runs-on: ubuntu-latest

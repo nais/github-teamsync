@@ -104,8 +104,11 @@ variables and must not load dotenv files at runtime.
   tags or manual dispatch and requires successful checks and builds. This repository
   publishes images, not deployments. Consumer deployment workflows live under examples.
 - Releases use the pinned git-cliff tool, `cliff.toml`, and Conventional Commits.
-  Keep release previews credential-free and offline. Stable tags are `vMAJOR.MINOR.PATCH`;
-  manual dispatch uses git-cliff's next version (initially `v0.1.0`). Publish the
+  Generate release previews offline without credentials; posting PR comments uses
+  the workflow token with `pull-requests: write` only in the release-info job.
+  Update the existing preview comment; fork and Dependabot PRs use job summaries only.
+  Stable tags are `vMAJOR.MINOR.PATCH`; manual dispatch uses git-cliff's next version
+  (initially `v0.1.0`). Publish the
   versioned image before creating the GitHub release, and confine `contents: write`
   to the release job. Keep release instructions in `DEVELOPMENT.md`.
 - Validate customized consumer manifests with `nais apply --dry-run`, selecting

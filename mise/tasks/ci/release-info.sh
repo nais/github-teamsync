@@ -14,13 +14,25 @@ fi
 
 notes="$(git-cliff "${args[@]}")"
 if [[ -z "$notes" ]]; then
-  echo 'No Conventional Commits to release.' >> "${GITHUB_STEP_SUMMARY:?}"
-  exit 0
+  preview='No Conventional Commits to release. Use Conventional Commit titles to include changes in the next release.'
+else
+  [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'git-cliff did not produce a valid release version.' >&2; exit 1; }
+  preview="$notes"
+  {
+    echo "tag=$tag"
+    echo "version=${tag#v}"
+  } >> "${GITHUB_OUTPUT:?}"
 fi
 
-[[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'git-cliff did not produce a valid release version.' >&2; exit 1; }
-printf '%s\n' "$notes" >> "${GITHUB_STEP_SUMMARY:?}"
-{
-  echo "tag=$tag"
-  echo "version=${tag#v}"
-} >> "${GITHUB_OUTPUT:?}"
+printf '%s\n' "$preview" >> "${GITHUB_STEP_SUMMARY:?}"
+
+if [[ "${GITHUB_EVENT_NAME:-}" == pull_request && "${IS_FORK:-true}" == false && "${GITHUB_ACTOR:-}" != 'dependabot[bot]' ]]; then
+  {
+    printf '# Release preview\n\n'
+    printf 'Only [Conventional Commits](https://www.conventionalcommits.org/) are included in release notes.\n\n'
+    printf '%s\n' "$preview"
+  } | gh pr comment "${PR_NUMBER:?}" \
+    --repo "$GITHUB_REPOSITORY" \
+    --edit-last --create-if-none \
+    --body-file -
+fi
