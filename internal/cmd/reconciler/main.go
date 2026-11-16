@@ -60,7 +60,7 @@ func Run(ctx context.Context) error {
 	}
 	identityClient := httpClient
 	if cfg.GitHubIdentityProvider != config.IdentityProviderOrganizationSAML {
-		identityClient, err = githubauth.NewEnterpriseIdentityClient(cfg.GitHubEnterpriseToken, http.DefaultTransport)
+		identityClient, err = githubauth.NewEnterpriseIdentityClient(ctx, cfg, http.DefaultTransport)
 		if err != nil {
 			return fmt.Errorf("GitHub enterprise identity authentication: %w", err)
 		}
