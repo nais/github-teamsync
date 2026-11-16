@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # ratchet:jdx/mise-action@v5
+      - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # ratchet:jdx/mise-action@v5
       - id: release-info
         run: mise run ci:release-info
 
@@ -41,17 +41,15 @@ jobs:
           - fmt:ci
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7
-      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # ratchet:jdx/mise-action@v5
+      - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # ratchet:jdx/mise-action@v5
       - run: mise run ${{ matrix.mise-task }}
 
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7
-      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # ratchet:jdx/mise-action@v5
+      - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # ratchet:jdx/mise-action@v5
       - run: mise run build
-      - name: Build container
-        run: docker build --build-arg GO_VERSION="$(mise current go)" --tag nais-github-teamsync:check .
 
   # Stable required check for branch protection, including failed or skipped jobs.
   branch-protection-checkpoint:
@@ -70,9 +68,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
-      packages: write
     outputs:
-      image: ${{ steps.release.outputs.image }}
+      image: ${{ steps.image.outputs.image }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7
       - name: Check image-publishing configuration
@@ -81,40 +78,22 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$NAIS_TEAM" || { echo 'Set the NAIS_TEAM repository variable before publishing.' >&2; exit 1; }
-      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # ratchet:jdx/mise-action@v5
+      - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # ratchet:jdx/mise-action@v5
       - name: Resolve Go version from mise
         id: toolchain
         run: echo "go-version=$(mise current go)" >> "$GITHUB_OUTPUT"
-      - name: Select distribution image version
-        id: release
-        env:
-          REPOSITORY: ${{ github.repository }}
-          VERSION: ${{ needs.release-info.outputs.version }}
-        run: |
-          set -euo pipefail
-          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Release version is not a valid container tag.' >&2; exit 1; }
-          echo "image=ghcr.io/${REPOSITORY,,}:${VERSION}" >> "$GITHUB_OUTPUT"
       - name: Build and publish signed image and SBOM to the Nais registry
-        uses: nais/docker-build-push@ceabe305c64640175f133b7e59af6666b0a3c46c # ratchet:nais/docker-build-push@v0
+        uses: nais/platform-build-push-sign@0f74f19fb291a0563f7d30e23fb83de3c4c7c851 # ratchet:nais/platform-build-push-sign@main
         id: image
         with:
-          team: ${{ vars.NAIS_TEAM }}
-          tenant: ${{ vars.NAIS_TENANT || 'nav' }}
+          name: github-teamsync
+          google_service_account: gh-github-teamsync
+          workload_identity_provider: ${{ secrets.NAIS_IO_WORKLOAD_IDENTITY_PROVIDER }}
+          push: true
+          extra_tags: ${{ needs.release-info.outputs.tag }}
           build_args: |
             GO_VERSION=${{ steps.toolchain.outputs.go-version }}
             VERSION=${{ needs.release-info.outputs.version }}
-      - name: Publish the reusable image to GitHub Container Registry
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ACTOR: ${{ github.actor }}
-          SOURCE_IMAGE: ${{ steps.image.outputs.image }}
-          TARGET_IMAGE: ${{ steps.release.outputs.image }}
-        run: |
-          set -euo pipefail
-          test -n "$SOURCE_IMAGE" || { echo 'The image-building step did not produce an image.' >&2; exit 1; }
-          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
-          docker buildx imagetools create --tag "$TARGET_IMAGE" "$SOURCE_IMAGE"
-          echo "Published image: \`$TARGET_IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
 
   release-github:
     runs-on: ubuntu-latest
@@ -125,7 +104,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # ratchet:jdx/mise-action@v5
+      - uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # ratchet:jdx/mise-action@v5
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
