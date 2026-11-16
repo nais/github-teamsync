@@ -1,5 +1,5 @@
 # Consumer example: copy to .github/workflows/deploy.yaml in your own repository.
-# Configure NAIS_TEAM and NAIS_ENVIRONMENT repository variables, authorize that
+# Configure DEPLOY_TEAM and NAIS_ENVIRONMENT repository variables, authorize that
 # repository in Nais Console, and copy the Application examples to .nais/.
 name: Deploy GitHub team sync
 on:
@@ -25,18 +25,18 @@ jobs:
       - uses: nais/setup@fb8692f65df9c904e2cdac5d395630ac876abdcf # ratchet:nais/setup@v1.0.3
         with:
           version: v3.8.4
-          team: ${{ vars.NAIS_TEAM }}
+          team: ${{ vars.DEPLOY_TEAM }}
           environment: ${{ vars.NAIS_ENVIRONMENT }}
       - name: Deploy the selected image
         env:
-          NAIS_TEAM: ${{ vars.NAIS_TEAM }}
+          DEPLOY_TEAM: ${{ vars.DEPLOY_TEAM }}
           NAIS_ENVIRONMENT: ${{ vars.NAIS_ENVIRONMENT }}
           IMAGE: ${{ inputs.image }}
         run: |
           set -euo pipefail
-          test -n "$NAIS_TEAM" || { echo 'Set the NAIS_TEAM repository variable.' >&2; exit 1; }
+          test -n "$DEPLOY_TEAM" || { echo 'Set the DEPLOY_TEAM repository variable.' >&2; exit 1; }
           test -n "$NAIS_ENVIRONMENT" || { echo 'Set the NAIS_ENVIRONMENT repository variable.' >&2; exit 1; }
           test -n "$IMAGE" || { echo 'Select a published image.' >&2; exit 1; }
-          nais apply .nais/app.yaml --team "$NAIS_TEAM" --environment "$NAIS_ENVIRONMENT" \
-            --set metadata.namespace="$NAIS_TEAM" --set metadata.labels.team="$NAIS_TEAM" \
+          nais apply .nais/app.yaml --team "$DEPLOY_TEAM" --environment "$NAIS_ENVIRONMENT" \
+            --set metadata.namespace="$DEPLOY_TEAM" --set metadata.labels.team="$DEPLOY_TEAM" \
             --set spec.image="$IMAGE" --wait
