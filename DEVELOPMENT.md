@@ -315,26 +315,25 @@ Runs with no unreleased Conventional Commits do not publish. PRs only check, bui
 and preview; they do not publish or create tags.
 
 Manual dispatch of **Check, build and publish** also releases the next git-cliff
-version. Alternatively, push a stable version tag (`vMAJOR.MINOR.PATCH`) on the
-commit to release; that version is used as-is. Both paths require successful
-checks/builds.
+version after successful checks/builds. Tag pushes do not trigger the workflow;
+version tags (`vMAJOR.MINOR.PATCH`) are outputs of the release process.
 
-The publisher repository must set `NAIS_TEAM`, optionally `NAIS_TENANT` (default
-`nav`), and authorize the repository in Nais Console. `nais/docker-build-push`
-creates the signed image and SBOM in the publisher's Nais registry; the workflow
-then mirrors the image to `ghcr.io/<owner>/<repository>`. Do not claim mirroring
-also copies signature/SBOM artifacts. Registry build auth uses OIDC; GHCR publishing
-uses the workflow's `GITHUB_TOKEN`, not runtime App credentials.
+Publishing uses `nais/platform-build-push-sign` with the
+`NAIS_IO_WORKLOAD_IDENTITY_PROVIDER` repository secret and the
+`gh-github-teamsync` Google service account. The action builds, publishes, and signs
+`europe-north1-docker.pkg.dev/nais-io/nais/images/github-teamsync` and generates its
+SBOM. Configure workload identity access for this repository. Registry build auth
+uses OIDC, not runtime App credentials; no GHCR mirror is published.
 
-The GHCR image tag and embedded binary version both omit the leading `v`. After
-image publishing succeeds, the workflow creates a GitHub release with git-cliff
+The image's extra version tag includes the leading `v`; the embedded binary version
+omits it. After image publishing succeeds, the workflow creates a GitHub release with git-cliff
 notes and the image reference. For pushes to `main` and manual dispatch, this also
 creates the version tag at the checked commit. The workflow token's tag creation
 does not trigger a second publishing run. No changelog file is committed. Release
 previews and notes are generated offline and need no GitHub API credentials.
 PR comment updates and release creation use the workflow token.
 
-Keep `id-token: write` and `packages: write` confined to publishing, and
+Keep `id-token: write` confined to publishing, and
 `contents: write` confined to GitHub release creation. Grant `pull-requests: write`
 only to the release-info job for preview comments. This project
 publishes images, not deployments. Consumer rollout workflows remain under

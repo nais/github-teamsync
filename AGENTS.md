@@ -101,7 +101,7 @@ variables and must not load dotenv files at runtime.
   `httptest`, and fake transports. Do not mutate live resources without explicit
   authorization.
 - Workflow permissions default to read-only; publishing is limited to pushes to
-  `main`, version tags, or manual dispatch and requires successful checks and builds.
+  `main` or manual dispatch and requires successful checks and builds.
   This repository publishes images, not deployments. Consumer deployment workflows
   live under examples.
 - Releases use the pinned git-cliff tool, `cliff.toml`, and Conventional Commits.
