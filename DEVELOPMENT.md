@@ -299,7 +299,11 @@ breaking changes. Other conventional types are included under miscellaneous chan
 unconventional messages are omitted. Git-cliff determines the next semantic version,
 starting at `v0.1.0` when no version tags exist.
 
-Every workflow run previews release notes in its job summary. To preview locally:
+Every workflow run previews release notes in its job summary. Same-repository PRs
+also get a release-preview comment, updated on subsequent pushes. When no
+Conventional Commits remain, the comment explains that there is nothing to release.
+Fork and Dependabot PRs use the job summary only, without attempting comment writes.
+To preview locally:
 
 ```sh
 mise exec -- git-cliff --offline --github-repo nais/nais-github-teamsync --bump --unreleased --strip all
@@ -324,11 +328,12 @@ image publishing succeeds, the workflow creates a GitHub release with git-cliff
 notes and the image reference. For manual dispatch, this also creates the version
 tag at the checked commit. The workflow token's tag creation does not trigger a
 second publishing run. No changelog file is committed. Release previews and notes
-are generated offline and need no GitHub API credentials; only release creation
-uses the workflow token.
+are generated offline and need no GitHub API credentials. PR comment updates and
+release creation use the workflow token.
 
 Keep `id-token: write` and `packages: write` confined to publishing, and
-`contents: write` confined to GitHub release creation. This project
+`contents: write` confined to GitHub release creation. Grant `pull-requests: write`
+only to the release-info job for preview comments. This project
 publishes images, not deployments. Consumer rollout workflows remain under
 `examples/nais/`; changes to manifests should be checked with `nais apply --dry-run`
 using consumer-specific values, without applying live resources.
