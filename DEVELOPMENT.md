@@ -290,7 +290,28 @@ binary/container builds. `branch-protection-checkpoint` requires all matrix chec
 and builds to succeed, including failed/skipped prerequisites; use it as the
 required branch-protection check.
 
-Publishing runs only for version tags (`v*`) or manual dispatch after checks/builds.
+### Releases
+
+Releases use [git-cliff](https://git-cliff.org/), pinned in `mise/config.toml`, with
+[`cliff.toml`](cliff.toml). Use Conventional Commit titles when squash-merging PRs:
+`feat:` adds features, `fix:` fixes bugs, and `!` or a `BREAKING CHANGE:` footer marks
+breaking changes. Other conventional types are included under miscellaneous changes;
+unconventional messages are omitted. Git-cliff determines the next semantic version,
+starting at `v0.1.0` when no version tags exist.
+
+Every workflow run previews release notes in its job summary. To preview locally:
+
+```sh
+mise exec -- git-cliff --offline --github-repo nais/nais-github-teamsync --bump --unreleased --strip all
+```
+
+Publishing runs only for stable version tags (`vMAJOR.MINOR.PATCH`) or manual
+dispatch after checks/builds. To release the next git-cliff version, dispatch
+**Check, build and publish** on `main`. Alternatively, push a stable version tag
+on the commit to release; that version is used as-is. Manual dispatch with no
+unreleased Conventional Commits does not publish. Ordinary pushes to `main` and
+PRs only check, build, and preview; they do not publish or create tags.
+
 The publisher repository must set `NAIS_TEAM`, optionally `NAIS_TENANT` (default
 `nav`), and authorize the repository in Nais Console. `nais/docker-build-push`
 creates the signed image and SBOM in the publisher's Nais registry; the workflow
@@ -298,7 +319,16 @@ then mirrors the image to `ghcr.io/<owner>/<repository>`. Do not claim mirroring
 also copies signature/SBOM artifacts. Registry build auth uses OIDC; GHCR publishing
 uses the workflow's `GITHUB_TOKEN`, not runtime App credentials.
 
-Keep `id-token: write` and `packages: write` confined to publishing. This project
+The GHCR image tag and embedded binary version both omit the leading `v`. After
+image publishing succeeds, the workflow creates a GitHub release with git-cliff
+notes and the image reference. For manual dispatch, this also creates the version
+tag at the checked commit. The workflow token's tag creation does not trigger a
+second publishing run. No changelog file is committed. Release previews and notes
+are generated offline and need no GitHub API credentials; only release creation
+uses the workflow token.
+
+Keep `id-token: write` and `packages: write` confined to publishing, and
+`contents: write` confined to GitHub release creation. This project
 publishes images, not deployments. Consumer rollout workflows remain under
 `examples/nais/`; changes to manifests should be checked with `nais apply --dry-run`
 using consumer-specific values, without applying live resources.

@@ -103,6 +103,11 @@ variables and must not load dotenv files at runtime.
 - Workflow permissions default to read-only; publishing is limited to version
   tags or manual dispatch and requires successful checks and builds. This repository
   publishes images, not deployments. Consumer deployment workflows live under examples.
+- Releases use the pinned git-cliff tool, `cliff.toml`, and Conventional Commits.
+  Keep release previews credential-free and offline. Stable tags are `vMAJOR.MINOR.PATCH`;
+  manual dispatch uses git-cliff's next version (initially `v0.1.0`). Publish the
+  versioned image before creating the GitHub release, and confine `contents: write`
+  to the release job. Keep release instructions in `DEVELOPMENT.md`.
 - Validate customized consumer manifests with `nais apply --dry-run`, selecting
   the target team/environment and supplying an image. Keep secrets out of manifests,
   keep one replica with `Recreate`, and explicitly configure network access. Refer
