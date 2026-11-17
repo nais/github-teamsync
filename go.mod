@@ -1,6 +1,6 @@
 module github.com/nais/nais-github-teamsync
 
-go 1.27.3
+go 1.27.4
 
 tool (
 	github.com/Khan/genqlient
@@ -87,7 +87,7 @@ require (
 	github.com/pb33f/go-yaml v0.1.1 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.2 // indirect
 	github.com/prometheus/client_model v0.6.3 // indirect
-	github.com/prometheus/common v0.73.1 // indirect
+	github.com/prometheus/common v0.74.0 // indirect
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
 	github.com/prometheus/procfs v0.23.0 // indirect
 	github.com/rs/zerolog v1.35.1 // indirect
@@ -109,14 +109,12 @@ require (
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/log v1.47.0 // indirect
 	go.opentelemetry.io/otel/trace v1.47.0 // indirect
-	go.yaml.in/yaml/v2 v2.4.5 // indirect
 	go.yaml.in/yaml/v3 v3.0.6 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/exp v0.0.0-20260212183809-81e46e3db34a // indirect
 	golang.org/x/exp/typeparams v0.0.0-20261109185158-a52e3aef5920 // indirect
 	golang.org/x/mod v0.43.0 // indirect
 	golang.org/x/net v0.62.0 // indirect
-	golang.org/x/oauth2 v0.38.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
 	golang.org/x/telemetry v0.0.0-20261109170223-bc0f59dd170a // indirect
 	golang.org/x/term v0.48.0 // indirect
