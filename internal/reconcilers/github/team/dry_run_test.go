@@ -91,8 +91,7 @@ func TestDryRunExistingTeam(t *testing.T) {
 	teams.EXPECT().GetTeamBySlug(ctx, "org", "child").Return(&github.Team{
 		Slug: new("child"), Description: new("old purpose"), Privacy: new("closed"), Parent: parent,
 	}, previewResponse(http.StatusOK), nil).Once()
-	teams.EXPECT().ListTeamMembersBySlug(ctx, "org", "child", mock.Anything).
-		Return([]*github.User{{Login: new("old-user")}}, previewResponse(http.StatusOK), nil).Once()
+	expectDirectMembers(t, graph, "child", "old-user")
 	expectPreviewIdentity(graph, 1)
 	r := New("org", teams, graph, WithDryRun(true))
 	log, output := previewLog()
@@ -190,8 +189,7 @@ func TestDryRunInaccessibleSAMLPreventsMembershipPlan(t *testing.T) {
 	teams.EXPECT().GetTeamBySlug(ctx, "org", "child").Return(&github.Team{
 		Slug: new("child"), Privacy: new("closed"), Parent: parent,
 	}, previewResponse(http.StatusOK), nil).Once()
-	teams.EXPECT().ListTeamMembersBySlug(ctx, "org", "child", mock.Anything).
-		Return([]*github.User{{Login: new("old-user")}}, previewResponse(http.StatusOK), nil).Once()
+	expectDirectMembers(t, graph, "child", "old-user")
 	graph.EXPECT().Query(ctx, mock.Anything, mock.Anything).Return(nil).Once()
 	r := New("org", teams, graph, WithDryRun(true))
 	log, output := previewLog()

@@ -66,13 +66,6 @@ func (s *previewTeamsService) GetTeamBySlug(ctx context.Context, org, slug strin
 	return team, resp, err
 }
 
-func (s *previewTeamsService) ListTeamMembersBySlug(ctx context.Context, org, slug string, opts *github.TeamListTeamMembersOptions) ([]*github.User, *github.Response, error) {
-	if s.created[slug] != nil {
-		return []*github.User{}, previewResponse(http.StatusOK), ctx.Err()
-	}
-	return s.base.ListTeamMembersBySlug(ctx, org, slug, opts)
-}
-
 func (s *previewTeamsService) ListChildTeamsByParentSlug(ctx context.Context, org, slug string, opts *github.ListOptions) ([]*github.Team, *github.Response, error) {
 	return s.base.ListChildTeamsByParentSlug(ctx, org, slug, opts)
 }

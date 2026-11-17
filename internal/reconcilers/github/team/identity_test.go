@@ -58,7 +58,7 @@ func TestIdentityLookupWireFormatAndMissingProvider(t *testing.T) {
 						_, _ = fmt.Fprintf(w, `{"data":%s}`, fmt.Sprintf(mode.responseFormat, tc.provider))
 					}))
 					defer server.Close()
-					r := &githubTeamReconciler{org: "org", enterprise: "enterprise", identityProvider: mode.provider, graphClient: githubv4.NewEnterpriseClient(server.URL, server.Client())}
+					r := &githubTeamReconciler{org: "org", enterprise: "enterprise", identityProvider: mode.provider, identityClient: githubv4.NewEnterpriseClient(server.URL, server.Client())}
 					username, err := r.getGitHubUsernameFromEmail(t.Context(), "user@example.com")
 					if tc.wantUser {
 						if err != nil {
@@ -109,9 +109,9 @@ func TestIdentityFailuresPreventMembershipChanges(t *testing.T) {
 					}))
 					defer server.Close()
 					teams := NewMockTeamsService(t)
-					teams.EXPECT().ListTeamMembersBySlug(mock.Anything, "org", "child", mock.Anything).
-						Return([]*github.User{{Login: new("old-user")}}, previewResponse(http.StatusOK), nil).Once()
-					r := New("org", teams, githubv4.NewEnterpriseClient(server.URL, server.Client()), WithDryRun(dryRun), WithIdentityProvider(mode.provider, "enterprise")).(*githubTeamReconciler)
+					graph := NewMockGraphClient(t)
+					expectDirectMembers(t, graph, "child", "old-user")
+					r := New("org", teams, graph, WithDryRun(dryRun), WithIdentityProvider(mode.provider, "enterprise", githubv4.NewEnterpriseClient(server.URL, server.Client()))).(*githubTeamReconciler)
 					log, output := previewLog()
 					r = r.withWritePreview(log)
 					err := r.connectUsers(t.Context(), &previewSource{members: []*naisapi.Member{{Email: "user@example.com"}}}, "child", &github.Team{Slug: new("child")}, log)
@@ -132,7 +132,7 @@ func TestIdentityLookupPropagatesCancellation(t *testing.T) {
 		t.Run(string(mode.provider), func(t *testing.T) {
 			graph := NewMockGraphClient(t)
 			graph.EXPECT().Query(mock.Anything, mock.Anything, mock.Anything).Return(context.Canceled).Once()
-			r := New("org", nil, graph, WithIdentityProvider(mode.provider, "enterprise")).(*githubTeamReconciler)
+			r := New("org", nil, nil, WithIdentityProvider(mode.provider, "enterprise", graph)).(*githubTeamReconciler)
 			if _, err := r.getGitHubUsernameFromEmail(t.Context(), "user@example.com"); !errors.Is(err, context.Canceled) {
 				t.Fatalf("error = %v, want context.Canceled", err)
 			}
@@ -149,15 +149,15 @@ func TestIdentityLookupDrivesMembershipChanges(t *testing.T) {
 				}))
 				defer server.Close()
 				teams := NewMockTeamsService(t)
-				teams.EXPECT().ListTeamMembersBySlug(mock.Anything, "org", "child", mock.Anything).
-					Return([]*github.User{{Login: new("old-user")}}, previewResponse(http.StatusOK), nil).Once()
+				graph := NewMockGraphClient(t)
+				expectDirectMembers(t, graph, "child", "old-user")
 				if !dryRun {
 					teams.EXPECT().RemoveTeamMembershipBySlug(mock.Anything, "org", "child", "old-user").
 						Return(previewResponse(http.StatusNoContent), nil).Once()
 					teams.EXPECT().AddTeamMembershipBySlug(mock.Anything, "org", "child", "new-user", github.AddTeamMembershipRequest{}).
 						Return(&github.Membership{}, previewResponse(http.StatusOK), nil).Once()
 				}
-				r := New("org", teams, githubv4.NewEnterpriseClient(server.URL, server.Client()), WithDryRun(dryRun), WithIdentityProvider(mode.provider, "enterprise")).(*githubTeamReconciler)
+				r := New("org", teams, graph, WithDryRun(dryRun), WithIdentityProvider(mode.provider, "enterprise", githubv4.NewEnterpriseClient(server.URL, server.Client()))).(*githubTeamReconciler)
 				log, output := previewLog()
 				r = r.withWritePreview(log)
 				if err := r.connectUsers(t.Context(), &previewSource{members: []*naisapi.Member{{Email: "user@example.com"}}}, "child", &github.Team{Slug: new("child")}, log); err != nil {

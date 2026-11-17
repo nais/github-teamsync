@@ -169,6 +169,14 @@ repository owns approval and rollout rules; this project does not run that workf
 
 ## Dry-run, scheduling, and deletion safety
 
+Membership reads use the organization installation and GitHub GraphQL's
+`members(membership: IMMEDIATE)` filter with complete pagination. Only direct
+memberships are compared with Nais; child-team memberships are never removed.
+An inherited-only Nais member still gets a direct membership. A user who is both
+a direct member and a child-team member can lose their direct membership while
+retaining inherited access. Missing, partial, or failed membership reads stop
+membership changes.
+
 `DRY_RUN=true` logs proposed writes at INFO with `dry_run=true`, `operation`, and
 the affected team/user. Use `LOG_LEVEL=info` or `debug`. Reads and ownership/SSO
 checks still run. The service continues full polling and handling targeted webhooks;

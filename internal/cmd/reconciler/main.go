@@ -65,8 +65,8 @@ func Run(ctx context.Context) error {
 			return fmt.Errorf("GitHub enterprise identity authentication: %w", err)
 		}
 	}
-	r := githubteams.New(cfg.GitHubOrganization, restClient.Teams, githubv4.NewClient(identityClient),
-		githubteams.WithDryRun(cfg.DryRun), githubteams.WithIdentityProvider(cfg.GitHubIdentityProvider, cfg.GitHubEnterprise))
+	r := githubteams.New(cfg.GitHubOrganization, restClient.Teams, githubv4.NewClient(httpClient),
+		githubteams.WithDryRun(cfg.DryRun), githubteams.WithIdentityProvider(cfg.GitHubIdentityProvider, cfg.GitHubEnterprise, githubv4.NewClient(identityClient)))
 	queue := syncer.NewTeamQueue()
 	s := &syncer.Syncer{
 		Client:       client,
