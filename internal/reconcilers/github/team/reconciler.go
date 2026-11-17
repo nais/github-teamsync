@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/go-github/v93/github"
 	"github.com/nais/nais-github-teamsync/internal/config"
@@ -18,7 +19,8 @@ import (
 var errGitHubUserNotFound = errors.New("GitHub user does not exist")
 
 const (
-	parentTeamSlug = "nais-teams"
+	parentTeamSlug     = "nais-teams"
+	parentTeamCacheTTL = 5 * time.Minute
 )
 
 type OptFunc func(*githubTeamReconciler)
@@ -42,6 +44,7 @@ func New(org string, teamsService TeamsService, graphClient GraphClient, opts ..
 		teamsService:     teamsService,
 		graphClient:      graphClient,
 		identityProvider: config.IdentityProviderOrganizationSAML,
+		parentTeamCache:  &parentTeamCache{gate: make(chan struct{}, 1)},
 	}
 
 	for _, opt := range opts {
@@ -58,10 +61,6 @@ func (r *githubTeamReconciler) Reconcile(ctx context.Context, source reconcilers
 		return err
 	}
 	parentTeamID := parentTeam.GetID()
-	if parentTeamID <= 0 {
-		return fmt.Errorf("GitHub parent team has no valid ID")
-	}
-
 	githubTeam, err := r.getOrCreateTeam(ctx, naisTeam, parentTeamID)
 	if err != nil {
 		return fmt.Errorf("unable to get or create a GitHub team for team %q: %w", naisTeam.Slug, err)
@@ -157,6 +156,36 @@ func (r *githubTeamReconciler) syncTeamInfo(ctx context.Context, naisTeam *naisa
 }
 
 func (r *githubTeamReconciler) getOrCreateParentTeam(ctx context.Context) (*github.Team, error) {
+	cache := r.parentTeamCache
+	if cache != nil {
+		select {
+		case cache.gate <- struct{}{}:
+			defer func() { <-cache.gate }()
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if cache != nil && time.Now().Before(cache.expiresAt) {
+		return cache.team, nil
+	}
+	team, err := r.resolveParentTeam(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if team.GetID() <= 0 {
+		return nil, fmt.Errorf("GitHub parent team has no valid ID")
+	}
+	if cache != nil {
+		cache.team = team
+		cache.expiresAt = time.Now().Add(parentTeamCacheTTL)
+	}
+	return team, nil
+}
+
+func (r *githubTeamReconciler) resolveParentTeam(ctx context.Context) (*github.Team, error) {
 	team, resp, err := r.teamsService.GetTeamBySlug(ctx, r.org, parentTeamSlug)
 	if resp == nil || resp.StatusCode != http.StatusNotFound {
 		if err := httpError(http.StatusOK, resp, err); err != nil {

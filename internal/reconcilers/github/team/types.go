@@ -2,6 +2,7 @@ package github_team_reconciler
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/go-github/v93/github"
 	"github.com/nais/nais-github-teamsync/internal/config"
@@ -31,6 +32,13 @@ type githubTeamReconciler struct {
 	identityProvider config.IdentityProvider
 	enterprise       string
 	dryRun           bool
+	parentTeamCache  *parentTeamCache
+}
+
+type parentTeamCache struct {
+	gate      chan struct{}
+	team      *github.Team
+	expiresAt time.Time
 }
 
 type GitHubUser struct {

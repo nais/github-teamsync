@@ -14,6 +14,8 @@ func (r *githubTeamReconciler) withWritePreview(log *slog.Logger) *githubTeamRec
 		return r
 	}
 	preview := *r
+	// Each preview must resolve its own parent, which might only exist in its plan.
+	preview.parentTeamCache = nil
 	preview.teamsService = &previewTeamsService{
 		base:    r.teamsService,
 		log:     log.With("dry_run", true),

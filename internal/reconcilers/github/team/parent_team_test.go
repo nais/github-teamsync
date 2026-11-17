@@ -1,15 +1,110 @@
 package github_team_reconciler
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/go-github/v93/github"
 	"github.com/nais/nais-github-teamsync/internal/naisapi"
 )
+
+func TestParentTeamCacheSharedAcrossWorkers(t *testing.T) {
+	ctx := t.Context()
+	teams := NewMockTeamsService(t)
+	parent := &github.Team{ID: new(int64(123))}
+	teams.EXPECT().GetTeamBySlug(ctx, "org", parentTeamSlug).
+		Return(parent, previewResponse(http.StatusOK), nil).Once()
+	r := New("org", teams, nil).(*githubTeamReconciler)
+
+	var workers sync.WaitGroup
+	for range 20 {
+		workers.Go(func() {
+			team, err := r.getOrCreateParentTeam(ctx)
+			if err != nil {
+				t.Error(err)
+			} else if team.GetID() != parent.GetID() {
+				t.Errorf("parent ID = %d, want %d", team.GetID(), parent.GetID())
+			}
+		})
+	}
+	workers.Wait()
+}
+
+func TestParentTeamCacheRefresh(t *testing.T) {
+	for _, failure := range []string{"lookup error", "invalid parent"} {
+		t.Run(failure, func(t *testing.T) {
+			ctx := t.Context()
+			teams := NewMockTeamsService(t)
+			parent := &github.Team{ID: new(int64(123))}
+			replacement := &github.Team{ID: new(int64(456))}
+			teams.EXPECT().GetTeamBySlug(ctx, "org", parentTeamSlug).
+				Return(parent, previewResponse(http.StatusOK), nil).Once()
+			r := New("org", teams, nil).(*githubTeamReconciler)
+			if _, err := r.getOrCreateParentTeam(ctx); err != nil {
+				t.Fatal(err)
+			}
+			r.parentTeamCache.expiresAt = time.Now().Add(-time.Second)
+			if failure == "lookup error" {
+				teams.EXPECT().GetTeamBySlug(ctx, "org", parentTeamSlug).
+					Return(nil, nil, errors.New("unavailable")).Once()
+			} else {
+				teams.EXPECT().GetTeamBySlug(ctx, "org", parentTeamSlug).
+					Return(&github.Team{}, previewResponse(http.StatusOK), nil).Once()
+			}
+			if _, err := r.getOrCreateParentTeam(ctx); err == nil {
+				t.Fatal("expected refresh failure, not stale parent")
+			}
+			teams.EXPECT().GetTeamBySlug(ctx, "org", parentTeamSlug).
+				Return(replacement, previewResponse(http.StatusOK), nil).Once()
+			for range 2 {
+				team, err := r.getOrCreateParentTeam(ctx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if team.GetID() != replacement.GetID() {
+					t.Errorf("parent ID = %d, want refreshed ID %d", team.GetID(), replacement.GetID())
+				}
+			}
+		})
+	}
+}
+
+func TestParentTeamCacheWaitRespectsCancellation(t *testing.T) {
+	r := New("org", NewMockTeamsService(t), nil).(*githubTeamReconciler)
+	r.parentTeamCache.gate <- struct{}{}
+	defer func() { <-r.parentTeamCache.gate }()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := r.getOrCreateParentTeam(ctx); !errors.Is(err, context.Canceled) {
+		t.Errorf("error = %v, want context.Canceled", err)
+	}
+}
+
+func TestParentTeamCacheDoesNotAuthorizeDeletion(t *testing.T) {
+	ctx := t.Context()
+	teams := NewMockTeamsService(t)
+	cachedParent := &github.Team{ID: new(int64(123))}
+	teams.EXPECT().GetTeamBySlug(ctx, "org", parentTeamSlug).
+		Return(cachedParent, previewResponse(http.StatusOK), nil).Once()
+	r := New("org", teams, nil).(*githubTeamReconciler)
+	if _, err := r.getOrCreateParentTeam(ctx); err != nil {
+		t.Fatal(err)
+	}
+	teams.EXPECT().GetTeamBySlug(ctx, "org", parentTeamSlug).
+		Return(&github.Team{ID: new(int64(456))}, previewResponse(http.StatusOK), nil).Once()
+	teams.EXPECT().GetTeamBySlug(ctx, "org", "team").
+		Return(&github.Team{Parent: cachedParent}, previewResponse(http.StatusOK), nil).Once()
+	err := r.Delete(ctx, nil, &naisapi.Team{Slug: "team"}, slog.New(slog.DiscardHandler))
+	if err == nil || !strings.Contains(err.Error(), "outside the managed parent") {
+		t.Fatalf("expected fresh ownership check to reject deletion, got %v", err)
+	}
+}
 
 func TestGetOrCreateParentTeam(t *testing.T) {
 	ctx := t.Context()

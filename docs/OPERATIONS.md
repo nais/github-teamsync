@@ -189,6 +189,12 @@ positive integers only). Set `SYNC_WORKERS=1` for serial processing. The same te
 never runs concurrently with itself. This limits concurrent teams, not API requests
 per minute; lower it if GitHub rate limiting becomes a problem.
 
+Team reconciliation shares a five-minute cache of the resolved `nais-teams`
+parent, refreshed on the next reconciliation after expiry, not just at startup.
+Failed refreshes stop reconciliation rather than reuse stale state. Inventory and
+deletion ownership checks always fetch the parent fresh. Dry-run resolves it per
+reconciliation so simulated parents are never cached across previews.
+
 Webhooks do not reset the full-poll deadline or require an empty queue before
 polling. When a poll is due, workers stop taking new targeted jobs and finish all
 active jobs before the full inventory is fetched. The full sync processes teams
