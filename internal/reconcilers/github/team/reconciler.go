@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/go-github/v93/github"
 	"github.com/nais/nais-github-teamsync/internal/config"
@@ -18,7 +19,8 @@ import (
 var errGitHubUserNotFound = errors.New("GitHub user does not exist")
 
 const (
-	parentTeamSlug = "nais-teams"
+	parentTeamSlug     = "nais-teams"
+	parentTeamCacheTTL = 5 * time.Minute
 )
 
 type OptFunc func(*githubTeamReconciler)
@@ -42,6 +44,7 @@ func New(org string, teamsService TeamsService, graphClient GraphClient, opts ..
 		teamsService:     teamsService,
 		graphClient:      graphClient,
 		identityProvider: config.IdentityProviderOrganizationSAML,
+		parentTeamCache:  &parentTeamCache{gate: make(chan struct{}, 1)},
 	}
 
 	for _, opt := range opts {
@@ -58,17 +61,9 @@ func (r *githubTeamReconciler) Reconcile(ctx context.Context, source reconcilers
 		return err
 	}
 	parentTeamID := parentTeam.GetID()
-	if parentTeamID <= 0 {
-		return fmt.Errorf("GitHub parent team has no valid ID")
-	}
-
 	githubTeam, err := r.getOrCreateTeam(ctx, naisTeam, parentTeamID)
 	if err != nil {
 		return fmt.Errorf("unable to get or create a GitHub team for team %q: %w", naisTeam.Slug, err)
-	}
-
-	if err := r.removeTeamIDPSync(ctx, *githubTeam.Slug); err != nil {
-		return err
 	}
 
 	if err := r.syncTeamInfo(ctx, naisTeam, githubTeam, parentTeamID); err != nil {
@@ -160,32 +155,37 @@ func (r *githubTeamReconciler) syncTeamInfo(ctx context.Context, naisTeam *naisa
 	return nil
 }
 
-func (r *githubTeamReconciler) removeTeamIDPSync(ctx context.Context, teamSlug string) error {
-	grpList := github.IDPGroupList{
-		Groups: make([]*github.IDPGroup, 0),
+func (r *githubTeamReconciler) getOrCreateParentTeam(ctx context.Context) (*github.Team, error) {
+	cache := r.parentTeamCache
+	if cache != nil {
+		select {
+		case cache.gate <- struct{}{}:
+			defer func() { <-cache.gate }()
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
-	idpList, resp, err := r.teamsService.CreateOrUpdateIDPGroupConnectionsBySlug(ctx, r.org, teamSlug, grpList)
-	if err != nil && strings.Contains(err.Error(), "team is not externally managed") {
-		// Special case: org has not been configured for team IDP sync, which we don't want to treat as an error
-		// More info: https://github.com/nais/teams-backend/issues/77
-		return nil
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-
-	if err := httpError(http.StatusOK, resp, err); err != nil {
-		return fmt.Errorf("unable to delete IDP sync from GitHub team %q: %w", teamSlug, err)
+	if cache != nil && time.Now().Before(cache.expiresAt) {
+		return cache.team, nil
 	}
-	if idpList == nil {
-		return fmt.Errorf("GitHub returned no IdP connection list for team %q", teamSlug)
+	team, err := r.resolveParentTeam(ctx)
+	if err != nil {
+		return nil, err
 	}
-
-	if len(idpList.Groups) > 0 {
-		return fmt.Errorf("tried to delete IDP sync from GitHub team %q, but %d connections still remain", teamSlug, len(idpList.Groups))
+	if team.GetID() <= 0 {
+		return nil, fmt.Errorf("GitHub parent team has no valid ID")
 	}
-
-	return nil
+	if cache != nil {
+		cache.team = team
+		cache.expiresAt = time.Now().Add(parentTeamCacheTTL)
+	}
+	return team, nil
 }
 
-func (r *githubTeamReconciler) getOrCreateParentTeam(ctx context.Context) (*github.Team, error) {
+func (r *githubTeamReconciler) resolveParentTeam(ctx context.Context) (*github.Team, error) {
 	team, resp, err := r.teamsService.GetTeamBySlug(ctx, r.org, parentTeamSlug)
 	if resp == nil || resp.StatusCode != http.StatusNotFound {
 		if err := httpError(http.StatusOK, resp, err); err != nil {

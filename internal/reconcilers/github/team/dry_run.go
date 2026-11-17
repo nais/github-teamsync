@@ -14,6 +14,8 @@ func (r *githubTeamReconciler) withWritePreview(log *slog.Logger) *githubTeamRec
 		return r
 	}
 	preview := *r
+	// Each preview must resolve its own parent, which might only exist in its plan.
+	preview.parentTeamCache = nil
 	preview.teamsService = &previewTeamsService{
 		base:    r.teamsService,
 		log:     log.With("dry_run", true),
@@ -100,13 +102,6 @@ func (s *previewTeamsService) UpdateTeamBySlug(ctx context.Context, org, slug st
 		return nil, nil, err
 	}
 	return &github.Team{Slug: new(slug)}, previewResponse(http.StatusOK), nil
-}
-
-func (s *previewTeamsService) CreateOrUpdateIDPGroupConnectionsBySlug(ctx context.Context, org, slug string, req github.IDPGroupList) (*github.IDPGroupList, *github.Response, error) {
-	if err := s.record(ctx, "disconnect_idp_groups", org, slug); err != nil {
-		return nil, nil, err
-	}
-	return &req, previewResponse(http.StatusOK), nil
 }
 
 func (s *previewTeamsService) AddTeamMembershipBySlug(ctx context.Context, org, slug, user string, _ github.AddTeamMembershipRequest) (*github.Membership, *github.Response, error) {

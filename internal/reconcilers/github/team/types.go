@@ -2,6 +2,7 @@ package github_team_reconciler
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/go-github/v93/github"
 	"github.com/nais/nais-github-teamsync/internal/config"
@@ -20,7 +21,6 @@ type TeamsService interface {
 	UpdateTeamBySlug(ctx context.Context, org, slug string, team github.UpdateTeamRequest) (*github.Team, *github.Response, error)
 	ListTeamMembersBySlug(ctx context.Context, org, slug string, opts *github.TeamListTeamMembersOptions) ([]*github.User, *github.Response, error)
 	RemoveTeamMembershipBySlug(ctx context.Context, org, slug, user string) (*github.Response, error)
-	CreateOrUpdateIDPGroupConnectionsBySlug(ctx context.Context, org, team string, opts github.IDPGroupList) (*github.IDPGroupList, *github.Response, error)
 	DeleteTeamBySlug(ctx context.Context, org, slug string) (*github.Response, error)
 }
 
@@ -32,6 +32,13 @@ type githubTeamReconciler struct {
 	identityProvider config.IdentityProvider
 	enterprise       string
 	dryRun           bool
+	parentTeamCache  *parentTeamCache
+}
+
+type parentTeamCache struct {
+	gate      chan struct{}
+	team      *github.Team
+	expiresAt time.Time
 }
 
 type GitHubUser struct {

@@ -141,11 +141,6 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			}).
 			Return(&github.Team{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
-		teamsService.EXPECT().
-			CreateOrUpdateIDPGroupConnectionsBySlug(mock.Anything, org, teamSlug, github.IDPGroupList{Groups: []*github.IDPGroup{}}).
-			Return(&github.IDPGroupList{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
-			Once()
-
 		reconciler := github_team_reconciler.New(org, teamsService, graphClient)
 
 		if err := reconciler.Reconcile(ctx, apiClient, naisTeam, log); err != nil {
@@ -246,14 +241,6 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 				nil,
 			).
 			Once()
-		teamsService.EXPECT().
-			CreateOrUpdateIDPGroupConnectionsBySlug(mock.Anything, org, teamName, github.IDPGroupList{Groups: []*github.IDPGroup{}}).
-			Return(
-				&github.IDPGroupList{},
-				httpOk,
-				nil,
-			).Once()
-
 		graphClient := github_team_reconciler.NewMockGraphClient(t)
 		graphClient.EXPECT().
 			Query(mock.Anything, mock.Anything, map[string]any{"org": githubv4.String(org), "username": githubv4.String(keepEmail)}).

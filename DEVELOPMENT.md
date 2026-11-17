@@ -64,7 +64,7 @@ the proxy supplies authentication. Remote or HTTPS endpoints require a workload
 token file. Never copy a workload token into `.env`, a Secret, or test data.
 
 `DRY_RUN=true` reads real upstream state and logs proposed writes at INFO without
-changing GitHub teams, memberships, or IdP mappings. It still obtains temporary
+changing GitHub teams or memberships. It still obtains temporary
 GitHub App installation tokens. Setting `DRY_RUN=false` or leaving it unset
 **changes real resources, including deleting orphans**. Do not run live mutation
 tests against shared or production organizations.
@@ -205,7 +205,7 @@ These are correctness requirements, not optional optimizations:
   a separate enterprise App installation client; all organization reads/writes
   keep using the organization installation client. Both installations use the
   same App ID/key. Never fall back between providers or installations.
-- **Dry-run must not forward resource writes.** All team, membership, and IdP
+- **Dry-run must not forward resource writes.** All team and membership
   writes must pass through the preview boundary. Keep its interface explicit so
   adding a new method requires a forwarding decision. Simulated state must stay
   local to a reconciliation, without mutating remote snapshots or persisting
