@@ -79,6 +79,25 @@ func expectOwnedTeam(t *testing.T, teamsService *github_team_reconciler.MockTeam
 		Once()
 }
 
+func expectDirectMembers(t *testing.T, graph *github_team_reconciler.MockGraphClient, org, slug string, logins ...string) {
+	t.Helper()
+	nodes := make([]map[string]string, 0, len(logins))
+	for _, login := range logins {
+		nodes = append(nodes, map[string]string{"login": login})
+	}
+	data, err := json.Marshal(nodes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	graph.EXPECT().Query(mock.Anything, mock.Anything, map[string]any{
+		"org": githubv4.String(org), "slug": githubv4.String(slug), "after": (*githubv4.String)(nil),
+	}).Run(func(_ context.Context, query any, _ map[string]any) {
+		if err := json.Unmarshal(fmt.Appendf(nil, `{"organization":{"team":{"members":{"nodes":%s,"pageInfo":{"hasNextPage":false}}}}}`, data), query); err != nil {
+			t.Fatal(err)
+		}
+	}).Return(nil).Once()
+}
+
 func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 	ctx := context.Background()
 
@@ -128,10 +147,7 @@ func TestGitHubReconciler_getOrCreateTeam(t *testing.T) {
 			GetTeamBySlug(ctx, org, teamSlug).
 			Return(&github.Team{Slug: new(teamSlug), Parent: &github.Team{ID: new(int64(123))}}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
 			Once()
-		teamsService.EXPECT().
-			ListTeamMembersBySlug(mock.Anything, org, teamSlug, mock.Anything).
-			Return([]*github.User{}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).
-			Once()
+		expectDirectMembers(t, graphClient, org, teamSlug)
 		teamsService.EXPECT().
 			UpdateTeamBySlug(mock.Anything, org, teamSlug, github.UpdateTeamRequest{
 				Name:         new(teamSlug),
@@ -208,17 +224,6 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 				nil,
 			).Once()
 		teamsService.EXPECT().
-			ListTeamMembersBySlug(mock.Anything, org, teamName, mock.Anything).
-			Return(
-				[]*github.User{
-					{Login: new(keepLogin)},
-					{Login: new(removeLogin)},
-				},
-				httpOk,
-				nil,
-			).
-			Once()
-		teamsService.EXPECT().
 			AddTeamMembershipBySlug(mock.Anything, org, teamName, createLogin, mock.Anything).
 			Return(
 				&github.Membership{
@@ -242,6 +247,7 @@ func TestGitHubReconciler_Reconcile(t *testing.T) {
 			).
 			Once()
 		graphClient := github_team_reconciler.NewMockGraphClient(t)
+		expectDirectMembers(t, graphClient, org, teamName, keepLogin, removeLogin)
 		graphClient.EXPECT().
 			Query(mock.Anything, mock.Anything, map[string]any{"org": githubv4.String(org), "username": githubv4.String(keepEmail)}).
 			Run(func(_ context.Context, q any, v map[string]any) {

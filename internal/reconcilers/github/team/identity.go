@@ -16,21 +16,21 @@ func (r *githubTeamReconciler) getGitHubUsernameFromEmail(ctx context.Context, e
 	case config.IdentityProviderOrganizationSAML:
 		var query LookupGitHubSamlUserByEmail
 		variables["org"] = githubv4.String(r.org)
-		if err := r.graphClient.Query(ctx, &query, variables); err != nil {
+		if err := r.identityClient.Query(ctx, &query, variables); err != nil {
 			return nil, err
 		}
 		provider = query.Organization.SamlIdentityProvider
 	case config.IdentityProviderEnterpriseSAML:
 		var query LookupEnterpriseSAMLUserByEmail
 		variables["enterprise"] = githubv4.String(r.enterprise)
-		if err := r.graphClient.Query(ctx, &query, variables); err != nil {
+		if err := r.identityClient.Query(ctx, &query, variables); err != nil {
 			return nil, err
 		}
 		provider = query.Enterprise.OwnerInfo.SamlIdentityProvider
 	case config.IdentityProviderEnterpriseOIDC:
 		var query LookupEnterpriseOIDCUserByEmail
 		variables["enterprise"] = githubv4.String(r.enterprise)
-		if err := r.graphClient.Query(ctx, &query, variables); err != nil {
+		if err := r.identityClient.Query(ctx, &query, variables); err != nil {
 			return nil, err
 		}
 		provider = query.Enterprise.OwnerInfo.OIDCProvider

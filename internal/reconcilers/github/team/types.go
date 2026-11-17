@@ -19,7 +19,6 @@ type TeamsService interface {
 	CreateTeam(ctx context.Context, org string, team github.CreateTeamRequest) (*github.Team, *github.Response, error)
 	GetTeamBySlug(ctx context.Context, org, slug string) (*github.Team, *github.Response, error)
 	UpdateTeamBySlug(ctx context.Context, org, slug string, team github.UpdateTeamRequest) (*github.Team, *github.Response, error)
-	ListTeamMembersBySlug(ctx context.Context, org, slug string, opts *github.TeamListTeamMembersOptions) ([]*github.User, *github.Response, error)
 	RemoveTeamMembershipBySlug(ctx context.Context, org, slug, user string) (*github.Response, error)
 	DeleteTeamBySlug(ctx context.Context, org, slug string) (*github.Response, error)
 }
@@ -28,6 +27,7 @@ type TeamsService interface {
 type githubTeamReconciler struct {
 	teamsService     TeamsService
 	graphClient      GraphClient
+	identityClient   GraphClient
 	org              string
 	identityProvider config.IdentityProvider
 	enterprise       string

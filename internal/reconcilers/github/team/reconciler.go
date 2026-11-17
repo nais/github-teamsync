@@ -31,10 +31,11 @@ func WithDryRun(dryRun bool) OptFunc {
 	}
 }
 
-func WithIdentityProvider(provider config.IdentityProvider, enterprise string) OptFunc {
+func WithIdentityProvider(provider config.IdentityProvider, enterprise string, client GraphClient) OptFunc {
 	return func(r *githubTeamReconciler) {
 		r.identityProvider = provider
 		r.enterprise = enterprise
+		r.identityClient = client
 	}
 }
 
@@ -43,6 +44,7 @@ func New(org string, teamsService TeamsService, graphClient GraphClient, opts ..
 		org:              org,
 		teamsService:     teamsService,
 		graphClient:      graphClient,
+		identityClient:   graphClient,
 		identityProvider: config.IdentityProviderOrganizationSAML,
 		parentTeamCache:  &parentTeamCache{gate: make(chan struct{}, 1)},
 	}
@@ -314,30 +316,6 @@ func (r *githubTeamReconciler) connectUsers(ctx context.Context, source reconcil
 	}
 
 	return errors.Join(membershipErrors...)
-}
-
-// getTeamMembers Get all team members in a GitHub team using a paginated query
-func (r *githubTeamReconciler) getTeamMembers(ctx context.Context, slug string) ([]*github.User, error) {
-	const maxPerPage = 100
-	opt := &github.TeamListTeamMembersOptions{
-		PerPage: maxPerPage,
-	}
-
-	allMembers := make([]*github.User, 0)
-	for {
-		members, resp, err := r.teamsService.ListTeamMembersBySlug(ctx, r.org, slug, opt)
-		err = httpError(http.StatusOK, resp, err)
-		if err != nil {
-			return nil, err
-		}
-		allMembers = append(allMembers, members...)
-		if resp.NextPage == 0 {
-			break
-		}
-		opt.Page = resp.NextPage
-	}
-
-	return allMembers, nil
 }
 
 // localOnlyMembers Given a mapping of GitHub usernames to Nais teams users, and a list of GitHub team members according

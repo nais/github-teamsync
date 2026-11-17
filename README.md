@@ -18,6 +18,10 @@ images and release notes.
 GitHub team slugs always match Nais team slugs. Existing GitHub teams must be direct
 children of `nais-teams`; a matching slug alone never authorizes adoption or deletion.
 
+Only direct memberships are reconciled. Memberships inherited from child teams
+are ignored and can still grant access; a Nais member is added directly even if
+they already inherit membership from a child team.
+
 **Run one instance per organization, with one replica and `Recreate`.** All direct
 children of `nais-teams` must belong to this service: orphan cleanup removes
 children absent from the complete Nais inventory. An empty inventory removes all
