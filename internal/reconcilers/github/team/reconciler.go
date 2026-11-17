@@ -67,10 +67,6 @@ func (r *githubTeamReconciler) Reconcile(ctx context.Context, source reconcilers
 		return fmt.Errorf("unable to get or create a GitHub team for team %q: %w", naisTeam.Slug, err)
 	}
 
-	if err := r.removeTeamIDPSync(ctx, *githubTeam.Slug); err != nil {
-		return err
-	}
-
 	if err := r.syncTeamInfo(ctx, naisTeam, githubTeam, parentTeamID); err != nil {
 		return err
 	}
@@ -155,31 +151,6 @@ func (r *githubTeamReconciler) syncTeamInfo(ctx context.Context, naisTeam *naisa
 
 	if err := httpError(http.StatusOK, resp, err); err != nil {
 		return fmt.Errorf("sync team info for GitHub team %q: %w", slug, err)
-	}
-
-	return nil
-}
-
-func (r *githubTeamReconciler) removeTeamIDPSync(ctx context.Context, teamSlug string) error {
-	grpList := github.IDPGroupList{
-		Groups: make([]*github.IDPGroup, 0),
-	}
-	idpList, resp, err := r.teamsService.CreateOrUpdateIDPGroupConnectionsBySlug(ctx, r.org, teamSlug, grpList)
-	if err != nil && strings.Contains(err.Error(), "team is not externally managed") {
-		// Special case: org has not been configured for team IDP sync, which we don't want to treat as an error
-		// More info: https://github.com/nais/teams-backend/issues/77
-		return nil
-	}
-
-	if err := httpError(http.StatusOK, resp, err); err != nil {
-		return fmt.Errorf("unable to delete IDP sync from GitHub team %q: %w", teamSlug, err)
-	}
-	if idpList == nil {
-		return fmt.Errorf("GitHub returned no IdP connection list for team %q", teamSlug)
-	}
-
-	if len(idpList.Groups) > 0 {
-		return fmt.Errorf("tried to delete IDP sync from GitHub team %q, but %d connections still remain", teamSlug, len(idpList.Groups))
 	}
 
 	return nil

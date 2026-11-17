@@ -102,13 +102,6 @@ func (s *previewTeamsService) UpdateTeamBySlug(ctx context.Context, org, slug st
 	return &github.Team{Slug: new(slug)}, previewResponse(http.StatusOK), nil
 }
 
-func (s *previewTeamsService) CreateOrUpdateIDPGroupConnectionsBySlug(ctx context.Context, org, slug string, req github.IDPGroupList) (*github.IDPGroupList, *github.Response, error) {
-	if err := s.record(ctx, "disconnect_idp_groups", org, slug); err != nil {
-		return nil, nil, err
-	}
-	return &req, previewResponse(http.StatusOK), nil
-}
-
 func (s *previewTeamsService) AddTeamMembershipBySlug(ctx context.Context, org, slug, user string, _ github.AddTeamMembershipRequest) (*github.Membership, *github.Response, error) {
 	if err := s.record(ctx, "add_team_member", org, slug, "username", user); err != nil {
 		return nil, nil, err

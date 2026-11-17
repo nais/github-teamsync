@@ -41,14 +41,14 @@ service account sees the full inventory before setting `DRY_RUN=false`.
 
 Create your own App with **Organization permissions → Members: Read and write**,
 install it in `GITHUB_ORG`, and keep the installation unsuspended. Repository
-permissions are not required. Validate access to team CRUD, memberships, IdP group
-connections, and, when selected, organization SAML external identities. Permission
+permissions are not required. Validate access to team CRUD, memberships,
+and, when selected, organization SAML external identities. Permission
 changes may require an organization owner to approve the updated grant.
 
 The service discovers the organization installation and refreshes installation
 access tokens automatically. Supply the App ID and a readable PEM private-key
-file, not installation IDs or OAuth client secrets. Team, membership, and IdP
-group operations always use the organization installation token. The key is read
+file, not installation IDs or OAuth client secrets. Team and membership
+operations always use the organization installation token. The key is read
 at startup; restart after rotating it.
 
 ### Identity provider selection
@@ -98,6 +98,26 @@ resolved desired set. Test this in a non-production organization.
 
 See [GitHub's enterprise SSO App permissions announcement](https://github.blog/changelog/2025-07-01-enterprise-level-access-for-github-apps-and-installation-automation-apis/#enterprise-sso-and-scim-management)
 and [enterprise App installation guide](https://docs.github.com/en/enterprise-cloud@latest/apps/using-github-apps/installing-a-github-app-on-your-enterprise).
+
+### External IdP team sync
+
+The service does not read or change GitHub team IdP group mappings, including
+disconnecting existing mappings. SSO identity lookups above only resolve GitHub
+usernames; they do not manage team sync connections.
+
+Use one membership authority per team. If an external IdP syncer also manages a
+team, GitHub may reject this service's membership additions/removals while the
+team is IdP-linked. Where writes are allowed, either syncer can undo the other's
+changes, causing membership churn and potentially unexpected access.
+
+This service still reconciles those teams against Nais; it does not skip them or
+merge memberships from both sources. Membership write failures are logged and
+fail that team's sync, suppressing orphan cleanup for that full cycle. A successful
+dry-run cannot confirm that GitHub will accept membership writes. Disable external
+team sync and disconnect its mappings manually before letting this service own
+membership, or keep externally managed teams outside the `nais-teams` hierarchy
+with slugs that do not collide with Nais teams. IdP links do not exempt a managed
+team from API-confirmed deletion or orphan cleanup.
 
 ## Manifests, secrets, and network access
 
@@ -152,8 +172,8 @@ repository owns approval and rollout rules; this project does not run that workf
 `DRY_RUN=true` logs proposed writes at INFO with `dry_run=true`, `operation`, and
 the affected team/user. Use `LOG_LEVEL=info` or `debug`. Reads and ownership/SSO
 checks still run. The service continues full polling and handling targeted webhooks;
-temporary App installation tokens are still obtained. No team, membership, or IdP
-mapping writes are sent to GitHub. Simulated missing teams do not persist between
+temporary App installation tokens are still obtained. No team or membership
+writes are sent to GitHub. Simulated missing teams do not persist between
 reconciliations. Nais API is read-only in both modes.
 
 The service performs a full sync at startup. When it finishes, successfully or not,

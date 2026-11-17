@@ -99,14 +99,14 @@ func TestDryRunExistingTeam(t *testing.T) {
 	if err := r.Reconcile(ctx, &previewSource{members: []*naisapi.Member{{Email: "new@example.com"}}}, &naisapi.Team{Slug: "child", Purpose: "new purpose"}, log); err != nil {
 		t.Fatal(err)
 	}
-	records := checkPreviewOperations(t, output, []string{"disconnect_idp_groups", "update_team", "remove_team_member", "add_team_member"})
-	if len(records) != 4 {
-		t.Fatal("expected four write previews")
+	records := checkPreviewOperations(t, output, []string{"update_team", "remove_team_member", "add_team_member"})
+	if len(records) != 3 {
+		t.Fatal("expected three write previews")
 	}
-	if records[1]["description"] != "new purpose" || records[1]["parent_team"] != parentTeamSlug {
-		t.Errorf("missing team update details: %v", records[1])
+	if records[0]["description"] != "new purpose" || records[0]["parent_team"] != parentTeamSlug {
+		t.Errorf("missing team update details: %v", records[0])
 	}
-	if records[2]["username"] != "old-user" || records[3]["username"] != "new-user" {
+	if records[1]["username"] != "old-user" || records[2]["username"] != "new-user" {
 		t.Errorf("missing membership details: %v", records)
 	}
 }
@@ -124,7 +124,7 @@ func TestDryRunMissingTeamsUsesFreshPlanEachTime(t *testing.T) {
 		if err := r.Reconcile(ctx, &previewSource{members: []*naisapi.Member{{Email: "new@example.com"}}}, &naisapi.Team{Slug: "child", Purpose: "purpose"}, log); err != nil {
 			t.Fatal(err)
 		}
-		checkPreviewOperations(t, output, []string{"create_team", "create_team", "disconnect_idp_groups", "add_team_member"})
+		checkPreviewOperations(t, output, []string{"create_team", "create_team", "add_team_member"})
 	}
 }
 
@@ -198,7 +198,7 @@ func TestDryRunInaccessibleSAMLPreventsMembershipPlan(t *testing.T) {
 	if err := r.Reconcile(ctx, &previewSource{members: []*naisapi.Member{{Email: "new@example.com"}}}, &naisapi.Team{Slug: "child"}, log); err == nil {
 		t.Fatal("expected SAML safeguard error")
 	}
-	checkPreviewOperations(t, output, []string{"disconnect_idp_groups"})
+	checkPreviewOperations(t, output, nil)
 }
 
 func TestDryRunPreviewsOrphanCleanup(t *testing.T) {

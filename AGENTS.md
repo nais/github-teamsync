@@ -83,8 +83,8 @@ variables and must not load dotenv files at runtime.
   cleanup. A matching slug alone does not authorize adoption or deletion.
 - Orphan cleanup runs only after successful full syncs, never targeted webhook work.
   `DRY_RUN=true` must perform the
-  same reads and safety checks while only logging proposed GitHub team/membership/
-  IdP writes. Do not send those writes in dry-run or retain simulated state across
+  same reads and safety checks while only logging proposed GitHub team/membership
+  writes. Do not send those writes in dry-run or retain simulated state across
   reconciliations. App token acquisition is still required for authenticated reads.
 - Support one required `GITHUB_ORG` per deployment with one scheduler and a bounded
   pool of team workers. Never process the same team concurrently; coalesce events

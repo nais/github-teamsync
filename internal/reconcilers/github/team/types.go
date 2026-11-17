@@ -20,7 +20,6 @@ type TeamsService interface {
 	UpdateTeamBySlug(ctx context.Context, org, slug string, team github.UpdateTeamRequest) (*github.Team, *github.Response, error)
 	ListTeamMembersBySlug(ctx context.Context, org, slug string, opts *github.TeamListTeamMembersOptions) ([]*github.User, *github.Response, error)
 	RemoveTeamMembershipBySlug(ctx context.Context, org, slug, user string) (*github.Response, error)
-	CreateOrUpdateIDPGroupConnectionsBySlug(ctx context.Context, org, team string, opts github.IDPGroupList) (*github.IDPGroupList, *github.Response, error)
 	DeleteTeamBySlug(ctx context.Context, org, slug string) (*github.Response, error)
 }
 

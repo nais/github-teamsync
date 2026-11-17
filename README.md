@@ -13,7 +13,6 @@ images and release notes.
 
 - A closed `nais-teams` parent and closed child teams with descriptions from Nais.
 - Memberships resolved from Nais emails through GitHub organization SAML or enterprise SAML/OIDC identities.
-- Disconnection of existing GitHub IdP group mappings.
 - API-confirmed team deletions, plus orphan cleanup after successful full syncs.
 
 GitHub team slugs always match Nais team slugs. Existing GitHub teams must be direct
@@ -23,6 +22,11 @@ children of `nais-teams`; a matching slug alone never authorizes adoption or del
 children of `nais-teams` must belong to this service: orphan cleanup removes
 children absent from the complete Nais inventory. An empty inventory removes all
 managed children. Failed/partial inventories suppress cleanup.
+
+Existing IdP group mappings are left untouched. Avoid managing the same team's
+membership with this service and an external IdP syncer: GitHub may reject
+membership writes, or the syncers may undo each other's changes. See
+[external IdP sync limitations](docs/OPERATIONS.md#external-idp-team-sync).
 
 ## Get started on Nais
 
@@ -94,7 +98,7 @@ Configuration comes from environment variables, not command-line flags.
 | `WEBHOOK_SOURCE` | Unset | Exact expected CloudEvents source, e.g. `https://<tenant-domain>/api`. |
 
 **Start with `DRY_RUN=true`.** It previews team creation/updates, membership changes,
-IdP disconnection, and deletions at INFO with `dry_run=true` and an `operation`
+and deletions at INFO with `dry_run=true` and an `operation`
 field. Reads and safety checks still run; App authentication still obtains
 temporary installation tokens. Unset or `false` enables writes, including cleanup.
 This setting is separate from the Nais CLI's manifest-preview `--dry-run` flag.
