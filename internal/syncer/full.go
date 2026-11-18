@@ -24,10 +24,10 @@ func (s *Syncer) Sync(ctx context.Context) (syncErr error) {
 	ctx, cancel := context.WithTimeout(ctx, s.Timeout)
 	defer cancel()
 	start := time.Now()
-	log := s.Log.With("organization", s.Organization)
-	log.InfoContext(ctx, "GitHub team sync started")
+	s.Log.InfoContext(ctx, "GitHub team sync started")
 	var teams []*naisapi.Team
 	defer func() {
+		log := s.Log
 		if syncErr == nil {
 			log = log.With("teams", len(teams))
 		}

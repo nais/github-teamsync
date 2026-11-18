@@ -41,12 +41,12 @@ func previewResponse(status int) *github.Response {
 	return &github.Response{Response: &http.Response{StatusCode: status}}
 }
 
-func (s *previewTeamsService) record(ctx context.Context, operation, org, slug string, attrs ...any) error {
+func (s *previewTeamsService) record(ctx context.Context, operation, slug string, attrs ...any) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	s.log.InfoContext(ctx, "would write GitHub team state", append([]any{
-		"operation", operation, "organization", org, "github_team", slug,
+		"operation", operation, "github_team", slug,
 	}, attrs...)...)
 	return nil
 }
@@ -70,12 +70,12 @@ func (s *previewTeamsService) ListChildTeamsByParentSlug(ctx context.Context, or
 	return s.base.ListChildTeamsByParentSlug(ctx, org, slug, opts)
 }
 
-func (s *previewTeamsService) CreateTeam(ctx context.Context, org string, req github.CreateTeamRequest) (*github.Team, *github.Response, error) {
+func (s *previewTeamsService) CreateTeam(ctx context.Context, _ string, req github.CreateTeamRequest) (*github.Team, *github.Response, error) {
 	attrs := []any{"description", req.GetDescription(), "privacy", req.GetPrivacy()}
 	if req.ParentTeamID != nil {
 		attrs = append(attrs, "parent_team", parentTeamSlug)
 	}
-	if err := s.record(ctx, "create_team", org, req.Name, attrs...); err != nil {
+	if err := s.record(ctx, "create_team", req.Name, attrs...); err != nil {
 		return nil, nil, err
 	}
 	team := &github.Team{
@@ -89,30 +89,30 @@ func (s *previewTeamsService) CreateTeam(ctx context.Context, org string, req gi
 	return team, previewResponse(http.StatusCreated), nil
 }
 
-func (s *previewTeamsService) UpdateTeamBySlug(ctx context.Context, org, slug string, req github.UpdateTeamRequest) (*github.Team, *github.Response, error) {
-	if err := s.record(ctx, "update_team", org, slug,
+func (s *previewTeamsService) UpdateTeamBySlug(ctx context.Context, _ string, slug string, req github.UpdateTeamRequest) (*github.Team, *github.Response, error) {
+	if err := s.record(ctx, "update_team", slug,
 		"name", req.GetName(), "description", req.GetDescription(), "privacy", req.GetPrivacy(), "parent_team", parentTeamSlug); err != nil {
 		return nil, nil, err
 	}
 	return &github.Team{Slug: new(slug)}, previewResponse(http.StatusOK), nil
 }
 
-func (s *previewTeamsService) AddTeamMembershipBySlug(ctx context.Context, org, slug, user string, _ github.AddTeamMembershipRequest) (*github.Membership, *github.Response, error) {
-	if err := s.record(ctx, "add_team_member", org, slug, "username", user); err != nil {
+func (s *previewTeamsService) AddTeamMembershipBySlug(ctx context.Context, _ string, slug, user string, _ github.AddTeamMembershipRequest) (*github.Membership, *github.Response, error) {
+	if err := s.record(ctx, "add_team_member", slug, "username", user); err != nil {
 		return nil, nil, err
 	}
 	return &github.Membership{}, previewResponse(http.StatusOK), nil
 }
 
-func (s *previewTeamsService) RemoveTeamMembershipBySlug(ctx context.Context, org, slug, user string) (*github.Response, error) {
-	if err := s.record(ctx, "remove_team_member", org, slug, "username", user); err != nil {
+func (s *previewTeamsService) RemoveTeamMembershipBySlug(ctx context.Context, _ string, slug, user string) (*github.Response, error) {
+	if err := s.record(ctx, "remove_team_member", slug, "username", user); err != nil {
 		return nil, err
 	}
 	return previewResponse(http.StatusNoContent), nil
 }
 
-func (s *previewTeamsService) DeleteTeamBySlug(ctx context.Context, org, slug string) (*github.Response, error) {
-	if err := s.record(ctx, "delete_team", org, slug); err != nil {
+func (s *previewTeamsService) DeleteTeamBySlug(ctx context.Context, _ string, slug string) (*github.Response, error) {
+	if err := s.record(ctx, "delete_team", slug); err != nil {
 		return nil, err
 	}
 	return previewResponse(http.StatusNoContent), nil

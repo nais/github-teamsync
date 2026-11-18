@@ -101,7 +101,7 @@ func TestFullSyncLifecycleLogs(t *testing.T) {
 			s.Organization = "example-org"
 			source.teams = []*naisapi.Team{{Slug: "active"}}
 			var output bytes.Buffer
-			s.Log = slog.New(slog.NewJSONHandler(&output, nil))
+			s.Log = slog.New(slog.NewJSONHandler(&output, nil)).With("organization", s.Organization)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			switch outcome {
@@ -115,6 +115,9 @@ func TestFullSyncLifecycleLogs(t *testing.T) {
 			wantSuccess := outcome == "success"
 			if err := s.Sync(ctx); (err == nil) != wantSuccess {
 				t.Fatalf("Sync() error = %v, want success = %t", err, wantSuccess)
+			}
+			if count := bytes.Count(output.Bytes(), []byte(`"organization":`)); count != 2 {
+				t.Errorf("expected one organization field per lifecycle log, got %d total", count)
 			}
 
 			logs := json.NewDecoder(&output)
