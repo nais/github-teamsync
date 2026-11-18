@@ -1,261 +1,158 @@
 # Deployment and operations
 
-See [README.md](../README.md) for a quick start and the configuration reference.
-This guide covers consumer-owned Nais deployments and optional webhook setup.
-Contributor workflows are documented in [DEVELOPMENT.md](../DEVELOPMENT.md).
-
 ## Deployment ownership and images
 
-Run the published image from **your own repository**. This project does not deploy
-a shared service or provide GitHub App credentials. Use one replica with
-`Recreate`, disable autoscaling, and do not overlap deployments on an organization:
-there is no distributed lock.
+Deploy the published image from your own repository using your own GitHub App.
+Use one replica with `Recreate`, disable autoscaling, and never overlap deployments
+for the same organization: there is no distributed lock.
 
-Select a published image accessible to your environment, preferably pinned by
-digest, such as `europe-north1-docker.pkg.dev/nais-io/nais/images/github-teamsync@sha256:<published-digest>`.
-Releases use semantic versions: `v1.2.3` produces image tag `v1.2.3`, including
-manually dispatched releases. See [GitHub releases](https://github.com/nais/nais-github-teamsync/releases)
-for release notes and image references. Package visibility/access must allow your
-environment to pull the image.
-If your platform requires images in your team's Nais registry, mirror the image
-following the [third-party image guide](https://docs.nais.io/workloads/how-to/upload-image/).
+Choose a pullable image from [GitHub releases](https://github.com/nais/nais-github-teamsync/releases),
+preferably pinned by digest. If your environment requires a team registry, follow
+the [third-party image guide](https://docs.nais.io/workloads/how-to/upload-image/).
 
 ## Nais API access
 
-Create a service account that can list **all** relevant teams and read their
-purpose, deletion status, and member email addresses. In Nais
-Console, open the account, choose **Add workload binding**, and select this
-application's team/environment. If the workload does not exist yet, deploy it
-first and add the binding afterward. Failed polls retry; restart for an immediate sync.
+Create a read-only service account that can list **all** relevant teams and read
+their purpose, deletion status, and member emails. In Nais Console, add a workload
+binding for the application's team and environment. If the workload does not yet
+exist, deploy with dry-run enabled and add the binding afterward. Failed polls
+retry; restart for an immediate sync.
 
-Nais injects a short-lived token file and `NAIS_SERVICE_ACCOUNT_TOKEN_PATH`. Do not
-override the path, mount your own Kubernetes service-account token, or copy token
-contents into a Secret. The client reopens the file for every request/page and
-never falls back to cached credentials. No write permission or internal gRPC access
-is needed.
-
-An incomplete/filtered team inventory is unsafe for cleanup. Verify that the
-service account sees the full inventory before setting `DRY_RUN=false`.
+Nais injects a rotating token and `NAIS_SERVICE_ACCOUNT_TOKEN_PATH`. Do not override
+it or copy tokens into Secrets. The client rereads the token on each request and
+page. Verify that the account sees the full inventory before enabling writes;
+a permission-filtered inventory can cause unwanted deletion.
 
 ## GitHub authentication and SSO access
 
-Create your own App with **Organization permissions → Members: Read and write**,
-install it in `GITHUB_ORG`, and keep the installation unsuspended. Repository
-permissions are not required. Validate access to team CRUD, memberships,
-and, when selected, organization SAML external identities. Permission
-changes may require an organization owner to approve the updated grant.
-
-The service discovers the organization installation and refreshes installation
-access tokens automatically. Supply the App ID and a readable PEM private-key
-file, not installation IDs or OAuth client secrets. Team and membership
-operations always use the organization installation token. The key is read
-at startup; restart after rotating it.
+Install your App in `GITHUB_ORG` with **Organization permissions → Members: Read
+and write**. No repository permissions are needed. Set `GITHUB_APP_ID` and
+`GITHUB_APP_PRIVATE_KEY_FILE`. The service discovers the installation and refreshes
+tokens automatically. Restart after rotating the private key. Permission changes
+may require approval from an organization owner.
 
 ### Identity provider selection
 
-Select the provider explicitly with `GITHUB_IDENTITY_PROVIDER`:
+`GITHUB_IDENTITY_PROVIDER` defaults to `organization-saml`, which uses the
+organization installation. For `enterprise-saml` or `enterprise-oidc`:
 
-| Value | Identity query | Authentication |
-| --- | --- | --- |
-| `organization-saml` (default) | `organization.samlIdentityProvider.externalIdentities` | Organization App installation token. |
-| `enterprise-saml` | `enterprise.ownerInfo.samlIdentityProvider.externalIdentities` | Enterprise App installation token. |
-| `enterprise-oidc` | `enterprise.ownerInfo.oidcProvider.externalIdentities` | Enterprise App installation token. |
+1. Grant the same App **Enterprise permissions → Enterprise single sign-on:
+   Read-only**. No SCIM or enterprise write permissions are needed.
+2. Install the App on both the enterprise and the target organization. Enterprise
+   ownership of the App is not an installation.
+3. Set `GITHUB_ENTERPRISE` to the enterprise slug. Leave it unset in organization mode.
 
-All modes filter `externalIdentities` by `userName`, using the Nais member email,
-and read the linked GitHub login. SSO usernames/NameIDs must match Nais emails;
-public profile emails and organization-verified-domain emails are not used.
-Users do not need to register their work email as a GitHub account email.
+Enterprise identity reads use a separate installation token; team and membership
+operations always use the organization token. There is no fallback. Missing,
+suspended, or mismatched installations fail startup. See GitHub's
+[enterprise installation guide](https://docs.github.com/en/enterprise-cloud@latest/apps/using-github-apps/installing-a-github-app-on-your-enterprise).
 
-For enterprise SAML/OIDC:
-
-1. Add **Enterprise permissions → Enterprise single sign-on: Read-only** to the
-   same App used for organization operations. No enterprise write or SCIM
-   permissions are needed for these queries.
-2. Install the App on the enterprise **and** the target organization. Registering
-   or owning the App at enterprise level is not the same as installing it there.
-   An enterprise installation does not grant organization access, and vice versa.
-3. Configure the provider and enterprise slug:
-
-   ```sh
-   GITHUB_IDENTITY_PROVIDER=enterprise-saml # or enterprise-oidc
-   GITHUB_ENTERPRISE=<enterprise-slug>
-   ```
-
-Both installations use the same `GITHUB_APP_ID` and
-`GITHUB_APP_PRIVATE_KEY_FILE`. The service discovers the enterprise installation
-through `/enterprises/{enterprise}/installation`, verifies its enterprise slug,
-target type, and suspension status, then obtains and refreshes a separate
-installation token for identity queries. Missing, suspended, or mismatched
-installations fail startup. Neither client follows API redirects.
-
-`GITHUB_ENTERPRISE` is required for enterprise modes and must be unset in
-organization mode. There is no automatic provider detection or credential
-fallback. Invalid combinations fail startup. A missing/
-inaccessible provider or failed query stops that team's membership changes.
-A user with no linked identity is skipped with a warning; their existing GitHub
-membership can be removed if that login is not in the
-resolved desired set. Test this in a non-production organization.
-
-See [GitHub's enterprise SSO App permissions announcement](https://github.blog/changelog/2025-07-01-enterprise-level-access-for-github-apps-and-installation-automation-apis/#enterprise-sso-and-scim-management)
-and [enterprise App installation guide](https://docs.github.com/en/enterprise-cloud@latest/apps/using-github-apps/installing-a-github-app-on-your-enterprise).
+SSO usernames or NameIDs must match Nais member emails. GitHub account and public
+profile emails are not used. An inaccessible provider or failed query stops that
+team's membership changes. A user with no linked identity is skipped with a
+warning, and their existing direct membership can be removed if the GitHub login
+is not in the resolved desired set. Test identity resolution before enabling writes.
 
 ### External IdP team sync
 
-The service does not read or change GitHub team IdP group mappings, including
-disconnecting existing mappings. SSO identity lookups above only resolve GitHub
-usernames; they do not manage team sync connections.
-
-Use one membership authority per team. If an external IdP syncer also manages a
-team, GitHub may reject this service's membership additions/removals while the
-team is IdP-linked. Where writes are allowed, either syncer can undo the other's
-changes, causing membership churn and potentially unexpected access.
-
-This service still reconciles those teams against Nais; it does not skip them or
-merge memberships from both sources. Membership write failures are logged and
-fail that team's sync, suppressing orphan cleanup for that full cycle. A successful
-dry-run cannot confirm that GitHub will accept membership writes. Disable external
-team sync and disconnect its mappings manually before letting this service own
-membership, or keep externally managed teams outside the `nais-teams` hierarchy
-with slugs that do not collide with Nais teams. IdP links do not exempt a managed
-team from API-confirmed deletion or orphan cleanup.
+Use one membership authority per team. This service neither reads nor disconnects
+IdP group mappings, and does not skip linked teams or merge memberships. GitHub may
+reject writes to linked teams, or the two syncers may undo each other's changes.
+Dry-run cannot verify write acceptance. Disconnect external mappings before handing
+over membership, or keep external teams outside `nais-teams` with non-conflicting
+slugs. An IdP link does not exempt a managed team from deletion.
 
 ## Manifests, secrets, and network access
 
-1. Copy [`examples/nais/app.yaml`](../examples/nais/app.yaml) to `.nais/app.yaml` in
-   your repository. Set the namespace/team labels and select an image.
-2. Create a Nais Secret named **`nais-github-teamsync`**, exposed through `envFrom`.
-   Supply `NAIS_API_URL`, `GITHUB_ORG`, `GITHUB_APP_ID`, and
-    `GITHUB_APP_PRIVATE_KEY_FILE`, plus enterprise identity settings when selected.
-    Start with `DRY_RUN=true`. Other optional
-   configuration can also be Secret keys; omit both webhook keys for polling only.
-3. Create **`nais-github-teamsync-github-app`** with a `private-key.pem` key. Copy
-   [`app.example.yaml`](../examples/nais/app.example.yaml) to
-   `.nais/app.<environment>.yaml` and customize it. Its `filesFrom` entry mounts
-   the key read-only at `/run/secrets/github-app/private-key.pem`, readable by the
-   non-root process. Set `GITHUB_APP_PRIVATE_KEY_FILE` to that path.
-4. Allow outbound HTTPS to `api.github.com` and the host in `NAIS_API_URL`. For
-   webhook delivery, allow inbound traffic from the Nais API application and its
-   namespace/cluster; its outbound policy must also allow this workload.
+1. Start with the [consumer deployment examples](https://github.com/navikt/nais-github-teamsync).
+   Set your team, namespace, and image. If using environment mixins, avoid duplicate
+   environment variables and mounts: lists concatenate rather than replace.
+2. Supply environment settings through a Nais Secret using `envFrom` and start
+   with `DRY_RUN=true`. Mount the PEM key read-only with `filesFrom`, make it
+   readable by the non-root process, and set `GITHUB_APP_PRIVATE_KEY_FILE` to match.
+   Keep credentials out of checked-in manifests.
+3. Allow outbound HTTPS to `api.github.com` and the Nais API host. For webhooks,
+   allow inbound traffic from the Nais API workload and ensure its outbound policy
+   permits delivery. Configure health probes and Prometheus scraping; keep those
+   endpoints internal.
+4. Validate with `nais apply --dry-run`, selecting your team and environment and
+   supplying the image. Replace `--dry-run` with `--wait` to deploy. The CLI flag
+   previews deployment; `DRY_RUN=true` previews GitHub writes at runtime.
 
-Never put private keys, workload tokens, or secret values in checked-in manifests.
-The base example provides health probes, internal service, Prometheus scraping,
-resource defaults, and UID/GID 65532. It deliberately omits an image and public ingress.
+For GitHub Actions deployments, authorize your consumer repository in Nais Console.
+That repository owns approvals and rollout. See the Nais guides for
+[Applications](https://docs.nais.io/workloads/application/reference/spec/),
+[secrets](https://docs.nais.io/services/secrets/how-to/workload/), and
+[access policies](https://docs.nais.io/workloads/how-to/access-policies/).
 
-`nais apply --environment <environment>` automatically merges an adjacent mixin.
-Maps/scalars are merged but **lists concatenate**: avoid duplicate environment
-variables and mounts. Replace all example hosts, teams, and namespaces.
+## Configuration
 
-Validate and preview the customized manifest before deploying:
+Configuration comes from environment variables, not command-line flags.
 
-```sh
-nais apply .nais/app.yaml --team <team> --environment <environment> \
-  --set metadata.namespace=<team> --set metadata.labels.team=<team> \
-  --set spec.image=<published-image-reference> --dry-run
-```
-
-Replace `--dry-run` with `--wait` to deploy. This Nais CLI flag previews manifest
-deployment; the service's **`DRY_RUN=true` environment setting** previews GitHub
-operations after the application starts. Keep both distinctions clear.
-
-The first deployment requires a published image. Later configuration-only deploys
-may omit the image override to retain the running image if the manifest does not
-pin another one.
-
-For manual GitHub Actions deployments, copy
-[`examples/nais/deploy.yaml`](../examples/nais/deploy.yaml) into your repository's
-`.github/workflows/`, set `DEPLOY_TEAM`/`NAIS_ENVIRONMENT` repository variables,
-authorize that repository in Nais Console, and select an image at dispatch. Your
-repository owns approval and rollout rules; this project does not run that workflow.
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `NAIS_API_URL` | Required | Nais GraphQL endpoint. |
+| `NAIS_SERVICE_ACCOUNT_TOKEN_PATH` | Injected by Nais | Rotating workload-token file; do not set it in the manifest. |
+| `GITHUB_ORG` | Required | Single target organization. |
+| `GITHUB_IDENTITY_PROVIDER` | `organization-saml` | `organization-saml`, `enterprise-saml`, or `enterprise-oidc`. |
+| `GITHUB_ENTERPRISE` | Unset | Enterprise slug; required for enterprise identity lookup. |
+| `GITHUB_APP_ID` | Required | Positive numeric App ID. |
+| `GITHUB_APP_PRIVATE_KEY_FILE` | Required | Readable PEM private-key file. |
+| `DRY_RUN` | `false` | Log proposed GitHub writes without applying them. |
+| `LISTEN_ADDRESS` | `127.0.0.1:3105` | Use `0.0.0.0:3105` in a container. |
+| `SYNC_INTERVAL` | `30m` | Delay from full-sync completion to the next poll. |
+| `SYNC_TIMEOUT` | `30m` | Full-sync deadline, including cleanup. |
+| `SYNC_WORKERS` | `5` | Maximum concurrent team syncs; use `1` for serial processing. |
+| `TEAM_TIMEOUT` | `2m` | Per-team deadline, including targeted reads; also applies to each orphan deletion. |
+| `LOG_FORMAT` | `json` | `json` or `text`. |
+| `LOG_LEVEL` | `info` | Slog level, such as `debug`, `info`, `warn`, `error`, or `INFO+2`. |
+| `WEBHOOK_SECRET` | Unset | Signing secret; set with `WEBHOOK_SOURCE`. |
+| `WEBHOOK_SOURCE` | Unset | Exact expected CloudEvents source. |
 
 ## Dry-run, scheduling, and deletion safety
 
-Membership reads use the organization installation and GitHub GraphQL's
-`members(membership: IMMEDIATE)` filter with complete pagination. Only direct
-memberships are compared with Nais; child-team memberships are never removed.
-An inherited-only Nais member still gets a direct membership. A user who is both
-a direct member and a child-team member can lose their direct membership while
-retaining inherited access. Missing, partial, or failed membership reads stop
-membership changes.
+Dry-run performs the same reads and ownership checks, obtains App installation
+tokens, and logs proposed writes at INFO with `dry_run=true`. It sends no team or
+membership writes and does not retain simulated state between reconciliations.
 
-`DRY_RUN=true` logs proposed writes at INFO with `dry_run=true`, `operation`, and
-the affected team/user. Use `LOG_LEVEL=info` or `debug`. Reads and ownership/SSO
-checks still run. The service continues full polling and handling targeted webhooks;
-temporary App installation tokens are still obtained. No team or membership
-writes are sent to GitHub. Simulated missing teams do not persist between
-reconciliations. Nais API is read-only in both modes.
+Only direct memberships are reconciled, after complete pagination. An inherited-only
+Nais member gets direct membership; removing a direct membership does not revoke
+inherited access. Incomplete reads stop membership changes.
 
-The service performs a full sync at startup. When it finishes, successfully or not,
-the next full poll becomes due after `SYNC_INTERVAL` (default: 30 minutes). This is
-a delay from completion, not a fixed wall-clock schedule. Between polls, validated
-webhooks queue only their `teamSlug`. The worker fetches that team's current
-GraphQL state and complete membership list before reconciling GitHub. This applies
-to member-added/removed/role events as well as team events;
-the email, role, or deletion action in the payload is never applied directly.
+A full poll runs at startup. The next is due `SYNC_INTERVAL` after the previous
+cycle finishes, even if it failed. When due, the scheduler stops starting targeted
+work and waits for active jobs before fetching inventory. Targeted work resumes
+after the full cycle, including cleanup. Webhooks can still queue work in the
+meantime. Workers limit concurrent teams, not API requests per minute.
 
-One scheduler manages up to `SYNC_WORKERS` concurrent team syncs (default: 5;
-positive integers only). Set `SYNC_WORKERS=1` for serial processing. The same team
-never runs concurrently with itself. This limits concurrent teams, not API requests
-per minute; lower it if GitHub rate limiting becomes a problem.
+**Reserve every direct child of `nais-teams` for this service.** Teams use their
+Nais slugs, and an existing team must be a direct child to be reconciled or deleted.
+Nais `deletionInProgress` can trigger deletion after an ownership check. Only after
+all full-sync teams succeed does cleanup refresh the complete Nais inventory and
+delete direct children whose slugs are missing, rechecking ownership before each
+deletion. The parent, nested descendants, and teams elsewhere are excluded. A
+cleanup failure stops further deletions for that cycle.
 
-Team reconciliation shares a five-minute cache of the resolved `nais-teams`
-parent, refreshed on the next reconciliation after expiry, not just at startup.
-Failed refreshes stop reconciliation rather than reuse stale state. Inventory and
-deletion ownership checks always fetch the parent fresh. Dry-run resolves it per
-reconciliation so simulated parents are never cached across previews.
-
-Webhooks do not reset the full-poll deadline or require an empty queue before
-polling. When a poll is due, workers stop taking new targeted jobs and finish all
-active jobs before the full inventory is fetched. The full sync processes teams
-with the same concurrency limit, waits for all results, and runs serial cleanup
-only if every team succeeded. Targeted work resumes after the full cycle returns;
-webhooks can continue queueing throughout. Cleanup never overlaps reconciliation.
-
-`SYNC_TIMEOUT` bounds the entire full cycle, including cleanup. Each full-sync team
-and orphan deletion is also bounded by `TEAM_TIMEOUT`. Targeted work shares one
-`TEAM_TIMEOUT` across its state lookup and reconciliation.
-
-A failed team does not block later teams; failed full reconciliation suppresses
-orphan cleanup for that cycle. Failed targeted work is retried by a later event or
-the periodic poll. Shutdown cancels and waits for active work without draining the
-queue. There is no durable queue, distributed lock, or per-team backoff.
-
-GitHub team slugs always match Nais team slugs; external GitHub team references are
-not queried or used. Existing teams must be direct children of `nais-teams` before
-they can be reconciled or deleted. For a still-present team, `deletionInProgress`
-triggers deletion of the GitHub team with the same slug, after verifying ownership.
-After every successful full sync, cleanup lists direct children of `nais-teams`,
-refreshes the complete Nais inventory, and deletes children whose slugs do not
-match a current Nais slug. Ownership is rechecked before each deletion. The reserved
-parent, teams elsewhere in the organization, and nested descendants are not cleanup
-candidates. A cleanup deletion failure or timeout stops further deletions for that cycle.
-
-**All direct children of `nais-teams` must belong exclusively to this service.**
-An unrelated manually created child is considered an orphan. A legitimately empty
-Nais inventory removes all managed direct children. Errors and partial inventories
-do not become empty inventories. There is no transaction spanning the two APIs:
-avoid concurrent team creation, renames, or hierarchy edits during a sync. Audit
-ownership and dry-run output before enabling writes.
+An unrelated direct child counts as an orphan, and a genuinely empty Nais inventory
+removes all managed direct children. Errors and partial inventories do not count
+as empty. Audit ownership and dry-run output before enabling writes, and avoid
+concurrent team or hierarchy edits during a sync.
 
 ## Optional webhooks
 
-Polling is sufficient without webhooks. Hooks request a fresh sync of only the
-team identified by `data.teamSlug`; they do not scan the organization or prune
-orphans. **Payloads never become desired state or direct deletion commands**.
-A missing, inaccessible, or partial single-team response makes no changes. If a
-team has already disappeared, only a successful full inventory can establish
-orphan cleanup; the webhook alone is not evidence that a team should be deleted.
+Polling is sufficient without webhooks. A valid event queues only `data.teamSlug`
+for a fresh team and membership read. The payload is never desired state or a
+deletion command. A missing or incomplete lookup makes no changes; only a
+successful full cycle can clean up orphans.
 
-The receiver implements the experimental
-[`nais/api` contract at `b8beefa436dcbf1e0f2cd7d3149d50ae7e728b51`](https://github.com/nais/api/tree/b8beefa436dcbf1e0f2cd7d3149d50ae7e728b51/internal/activitylog/webhook).
-Check that contract against the API version you deploy.
+Set `WEBHOOK_SECRET` to the provider's signing secret and `WEBHOOK_SOURCE` to the
+exact CloudEvents source (typically `https://<TENANT_DOMAIN>/api`, not the receiver
+URL). This integration uses an [experimental Nais API contract](https://github.com/nais/api/tree/b8beefa436dcbf1e0f2cd7d3149d50ae7e728b51/internal/activitylog/webhook);
+verify compatibility with the API version you deploy.
 
-Set both:
-
-- `WEBHOOK_SECRET`: the signing secret managed by the webhook provider.
-- `WEBHOOK_SOURCE`: the exact expected CloudEvents source,
-  `https://<TENANT_DOMAIN>/api`. It identifies the event source, not the receiver URL.
-
-Register a **global** subscription as a Nais API admin, omitting `teamSlug`:
+As a Nais API admin, register a **global** subscription (omit `teamSlug`) using a
+reachable receiver URL ending in `/webhooks/nais` and the shared signing secret.
+Use HTTPS outside a trusted private network; HMAC does not encrypt payloads.
 
 ```graphql
 mutation CreateTeamsyncWebhook($url: String!, $secret: String!) {
@@ -272,66 +169,34 @@ mutation CreateTeamsyncWebhook($url: String!, $secret: String!) {
 }
 ```
 
-Use a reachable URL ending in `/webhooks/nais` and the same signing secret as the
-receiver. Creation and deletion-confirmation events are global-only in that API
-branch. A reachable internal URL is
-`http://nais-github-teamsync.<team>/webhooks/nais`. If needed, use the example
-ingress restricted to that path; keep health/metrics internal and use HTTPS
-outside a trusted private network. HMAC authenticates but does not encrypt payloads.
+### Delivery and troubleshooting
 
-### Delivery contract and troubleshooting
-
-- CloudEvents 1.0 JSON, `Content-Type: application/cloudevents+json`.
-- `X-Webhook-Signature: sha256=<hex HMAC-SHA256 of the exact request body>`.
-- Constant-time signature verification, exact source match, 1 MiB body limit,
-  and event `time` within five minutes of the receiver's clock. Synchronize clocks.
-- Supported types: `io.nais.team.created`, `io.nais.team.updated`,
-  `io.nais.team.confirm.delete.key`, `io.nais.team.member.added`,
-  `io.nais.team.member.removed`, and `io.nais.team.member.set.role`.
-- Relevant events must include a non-empty `data.teamSlug` matching the TEAM
-  resource name. Missing or inconsistent team identifiers are rejected.
+- Send CloudEvents 1.0 JSON as `application/cloudevents+json`, with
+  `X-Webhook-Signature: sha256=<hex HMAC-SHA256 of the exact request body>`.
+- The receiver requires an exact source match, a body no larger than 1 MiB, and
+  an event time within five minutes of its clock. For team events, `data.teamSlug`
+  must match the TEAM resource name.
 
 | Status | Meaning |
 | --- | --- |
-| `202` | Team accepted into the in-memory queue, not completed GitHub work. |
-| `204` | Signed ping, duplicate delivery, or unrelated valid event. |
+| `202` | Queued, not reconciled. |
+| `204` | Signed ping, duplicate, or unrelated valid event. |
 | `400` | Malformed or stale event. |
 | `401` | Invalid signature. |
 | `403` | Unexpected source. |
 | `413` | Oversized body. |
 | `415` | Unsupported content type. |
-| `503` | Receiver disabled or the pending-team queue is full; retry delivery. |
+| `503` | Receiver disabled or queue full. Retry after resolving the cause. |
 
-A queue holds up to 1024 distinct waiting teams, separate from active workers, and
-coalesces events for the same waiting team. Workers take the oldest ready team;
-blocked follow-ups do not prevent unrelated teams from running. A new event for a
-team currently being processed queues one follow-up read that becomes eligible
-after processing finishes. If full, the receiver returns `503` without recording
-the rejected delivery ID, so a retry can enqueue it.
+The in-memory queue holds up to 1024 waiting teams, separate from active workers.
+Events coalesce by team, with at most one follow-up during active work. A rejected
+delivery is not deduplicated; accepted delivery IDs are cached for up to 24 hours
+(4096 entries). Full polls recover missed deliveries and work lost on restart.
+Monitor delivery history: repeated failures can disable the subscription.
 
-Accepted delivery IDs are deduplicated for up to 24 hours with a 4096-entry cache;
-eviction/restart can cause another idempotent sync. The experimental API generates
-a fresh timestamp per retry while keeping the delivery ID. Startup and periodic
-full polling recover from missed hooks and process failures, including queued
-work lost on restart.
+## Monitoring
 
-The API branch emits pending-deletion confirmation, not a final `TEAM_DELETED`
-event. Orphan cleanup handles records already gone before processing. Monitor
-subscription delivery history: repeated failures can disable the subscription.
-Automatic subscription registration, dual-secret rotation, and durable webhook
-storage are not implemented.
-
-## Monitoring and references
-
-- `GET /healthz`: process liveness, not proof of upstream access or successful sync.
-- `GET /metrics`: polling-cycle counts/durations labeled by organization and error.
-- Review sync errors and webhook delivery history; a healthy process or accepted
-  webhook does not mean reconciliation succeeded.
-- Nais API owns overall team deletion and sync status. Console's reconciler
-  enable/disable setting does not control this service.
-
-Nais documentation: [Application specification](https://docs.nais.io/workloads/application/reference/spec/),
-[secrets](https://docs.nais.io/services/secrets/how-to/workload/),
-[access policies](https://docs.nais.io/workloads/how-to/access-policies/),
-[environment mixins](https://docs.nais.io/build/explanations/environment-mixins/),
-and [GitHub Actions deployment](https://docs.nais.io/build/how-to/build-and-deploy/).
+- `GET /healthz` reports process liveness, not sync success or upstream access.
+- `GET /metrics` reports full-sync counts and durations by organization and error.
+- Review sync errors and webhook delivery history. Nais owns overall team deletion
+  and sync status; the Console reconciler toggle does not control this service.
