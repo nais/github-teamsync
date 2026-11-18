@@ -2,4 +2,4 @@
 #MISE description="Verify all GitHub actions are pinned"
 set -euo pipefail
 
-ratchet lint .github/workflows/*.yaml examples/nais/deploy.yaml
+ratchet lint .github/workflows/*.yaml

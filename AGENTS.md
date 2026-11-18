@@ -21,7 +21,7 @@ in `docs/OPERATIONS.md`.
 - GitHub reconciliation and ownership checks: `internal/reconcilers/github/team/`.
 - Single-organization polling and orphan cleanup: `internal/syncer/`.
 - Signed Nais CloudEvents receiver: `internal/webhook/`.
-- Consumer-owned Nais manifest/workflow examples: `examples/nais/`; tasks: `mise/tasks/`.
+- Mise tasks: `mise/tasks/`.
 
 ## Commands
 
@@ -102,8 +102,8 @@ variables and must not load dotenv files at runtime.
   authorization.
 - Workflow permissions default to read-only; publishing is limited to pushes to
   `main` or manual dispatch and requires successful checks and builds.
-  This repository publishes images, not deployments. Consumer deployment workflows
-  live under examples.
+  This repository publishes images, not deployments. Consumer deployment examples
+  live at https://github.com/navikt/nais-github-teamsync.
 - Releases use the pinned git-cliff tool, `cliff.toml`, and Conventional Commits.
   Generate release previews offline without credentials; posting PR comments uses
   the workflow token with `pull-requests: write` only in the release-info job.
