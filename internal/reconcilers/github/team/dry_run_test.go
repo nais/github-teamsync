@@ -57,6 +57,10 @@ func checkPreviewOperations(t *testing.T, output *bytes.Buffer, want []string) [
 		} else if err != nil {
 			t.Fatal(err)
 		}
+		// Sync lifecycle logs are not write previews.
+		if record["dry_run"] == nil && record["operation"] == nil {
+			continue
+		}
 		if record["dry_run"] != true || record["organization"] != "org" {
 			t.Errorf("missing dry-run context: %v", record)
 		}
@@ -215,14 +219,9 @@ func TestDryRunPreviewsOrphanCleanup(t *testing.T) {
 	if err := s.Sync(ctx); err != nil {
 		t.Fatal(err)
 	}
-	// The final sync-complete log is not a write preview.
-	decoder := json.NewDecoder(output)
-	var write map[string]any
-	if err := decoder.Decode(&write); err != nil {
-		t.Fatal(err)
-	}
-	if write["operation"] != "delete_team" || write["github_team"] != "orphan" || write["dry_run"] != true {
-		t.Errorf("missing orphan deletion preview: %v", write)
+	records := checkPreviewOperations(t, output, []string{"delete_team"})
+	if len(records) != 1 || records[0]["github_team"] != "orphan" {
+		t.Errorf("missing orphan deletion preview: %v", records)
 	}
 }
 
@@ -246,9 +245,7 @@ func TestOrphanCleanupRechecksOwnershipBeforeDeletion(t *testing.T) {
 			if err := s.Sync(t.Context()); err == nil {
 				t.Fatal("expected ownership safeguard error")
 			}
-			if output.Len() != 0 {
-				t.Errorf("unowned orphan must not be previewed for deletion: %s", output)
-			}
+			checkPreviewOperations(t, output, nil)
 		})
 	}
 }

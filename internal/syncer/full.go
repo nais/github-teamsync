@@ -24,6 +24,16 @@ func (s *Syncer) Sync(ctx context.Context) (syncErr error) {
 	ctx, cancel := context.WithTimeout(ctx, s.Timeout)
 	defer cancel()
 	start := time.Now()
+	log := s.Log.With("organization", s.Organization)
+	log.InfoContext(ctx, "GitHub team sync started")
+	var teams []*naisapi.Team
+	defer func() {
+		if syncErr == nil {
+			log = log.With("teams", len(teams))
+		}
+		log.InfoContext(ctx, "GitHub team sync finished", "success", syncErr == nil, "duration", time.Since(start))
+	}()
+
 	meter := otel.Meter("nais-github-teamsync")
 	cycles, err := meter.Int64Counter("teamsync_cycles_total", metric.WithDescription("Completed polling cycles"))
 	if err != nil {
@@ -39,7 +49,7 @@ func (s *Syncer) Sync(ctx context.Context) (syncErr error) {
 		duration.Record(ctx, time.Since(start).Seconds(), opts)
 	}()
 
-	teams, err := s.teams(ctx)
+	teams, err = s.teams(ctx)
 	if err != nil {
 		return err
 	}
@@ -49,7 +59,6 @@ func (s *Syncer) Sync(ctx context.Context) (syncErr error) {
 	if err := s.prune(ctx); err != nil {
 		return err
 	}
-	s.Log.InfoContext(ctx, "GitHub team sync completed", "teams", len(teams))
 	return nil
 }
 

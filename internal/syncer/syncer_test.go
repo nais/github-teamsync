@@ -1,8 +1,11 @@
 package syncer
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"slices"
 	"testing"
@@ -89,6 +92,61 @@ func newTestSyncer() (*Syncer, *fakeSource, *fakeReconciler) {
 	r := &fakeReconciler{}
 	log := slog.New(slog.DiscardHandler)
 	return &Syncer{Client: source, Reconciler: r, Log: log, Workers: 1, Interval: time.Hour, Timeout: time.Minute, TeamTimeout: time.Second}, source, r
+}
+
+func TestFullSyncLifecycleLogs(t *testing.T) {
+	for _, outcome := range []string{"success", "inventory failure", "cleanup failure", "canceled"} {
+		t.Run(outcome, func(t *testing.T) {
+			s, source, r := newTestSyncer()
+			s.Organization = "example-org"
+			source.teams = []*naisapi.Team{{Slug: "active"}}
+			var output bytes.Buffer
+			s.Log = slog.New(slog.NewJSONHandler(&output, nil))
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			switch outcome {
+			case "inventory failure":
+				source.err = errors.New("inventory unavailable")
+			case "cleanup failure":
+				r.inventoryErr = errors.New("cleanup inventory unavailable")
+			case "canceled":
+				source.onList = func(context.Context, int) { cancel() }
+			}
+			wantSuccess := outcome == "success"
+			if err := s.Sync(ctx); (err == nil) != wantSuccess {
+				t.Fatalf("Sync() error = %v, want success = %t", err, wantSuccess)
+			}
+
+			logs := json.NewDecoder(&output)
+			for _, message := range []string{"GitHub team sync started", "GitHub team sync finished"} {
+				var entry struct {
+					Level        string         `json:"level"`
+					Message      string         `json:"msg"`
+					Organization string         `json:"organization"`
+					Success      *bool          `json:"success"`
+					Duration     *time.Duration `json:"duration"`
+					Teams        *int           `json:"teams"`
+				}
+				if err := logs.Decode(&entry); err != nil {
+					t.Fatalf("decode %q: %v", message, err)
+				}
+				if entry.Level != "INFO" || entry.Message != message || entry.Organization != s.Organization {
+					t.Fatalf("unexpected lifecycle log: %+v", entry)
+				}
+				if message == "GitHub team sync finished" {
+					if entry.Success == nil || *entry.Success != wantSuccess || entry.Duration == nil || *entry.Duration < 0 {
+						t.Error("finish log must report the sync outcome and duration")
+					}
+					if wantSuccess && (entry.Teams == nil || *entry.Teams != 1) {
+						t.Error("successful finish log must report the team count")
+					}
+				}
+			}
+			if err := logs.Decode(new(json.RawMessage)); !errors.Is(err, io.EOF) {
+				t.Errorf("expected exactly two lifecycle logs, got decode error %v after the second", err)
+			}
+		})
+	}
 }
 
 func TestReconcileAndConfirmedDeletion(t *testing.T) {
