@@ -21,11 +21,12 @@ func TestParentTeamCacheSharedAcrossWorkers(t *testing.T) {
 	teams.EXPECT().GetTeamBySlug(ctx, "org", parentTeamSlug).
 		Return(parent, previewResponse(http.StatusOK), nil).Once()
 	r := New("org", teams, nil).(*githubTeamReconciler)
+	log := slog.New(slog.DiscardHandler)
 
 	var workers sync.WaitGroup
 	for range 20 {
 		workers.Go(func() {
-			team, err := r.getOrCreateParentTeam(ctx)
+			team, err := r.getOrCreateParentTeam(ctx, log)
 			if err != nil {
 				t.Error(err)
 			} else if team.GetID() != parent.GetID() {
@@ -46,7 +47,8 @@ func TestParentTeamCacheRefresh(t *testing.T) {
 			teams.EXPECT().GetTeamBySlug(ctx, "org", parentTeamSlug).
 				Return(parent, previewResponse(http.StatusOK), nil).Once()
 			r := New("org", teams, nil).(*githubTeamReconciler)
-			if _, err := r.getOrCreateParentTeam(ctx); err != nil {
+			log := slog.New(slog.DiscardHandler)
+			if _, err := r.getOrCreateParentTeam(ctx, log); err != nil {
 				t.Fatal(err)
 			}
 			r.parentTeamCache.expiresAt = time.Now().Add(-time.Second)
@@ -57,13 +59,13 @@ func TestParentTeamCacheRefresh(t *testing.T) {
 				teams.EXPECT().GetTeamBySlug(ctx, "org", parentTeamSlug).
 					Return(&github.Team{}, previewResponse(http.StatusOK), nil).Once()
 			}
-			if _, err := r.getOrCreateParentTeam(ctx); err == nil {
+			if _, err := r.getOrCreateParentTeam(ctx, log); err == nil {
 				t.Fatal("expected refresh failure, not stale parent")
 			}
 			teams.EXPECT().GetTeamBySlug(ctx, "org", parentTeamSlug).
 				Return(replacement, previewResponse(http.StatusOK), nil).Once()
 			for range 2 {
-				team, err := r.getOrCreateParentTeam(ctx)
+				team, err := r.getOrCreateParentTeam(ctx, log)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -81,7 +83,7 @@ func TestParentTeamCacheWaitRespectsCancellation(t *testing.T) {
 	defer func() { <-r.parentTeamCache.gate }()
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := r.getOrCreateParentTeam(ctx); !errors.Is(err, context.Canceled) {
+	if _, err := r.getOrCreateParentTeam(ctx, slog.New(slog.DiscardHandler)); !errors.Is(err, context.Canceled) {
 		t.Errorf("error = %v, want context.Canceled", err)
 	}
 }
@@ -93,7 +95,7 @@ func TestParentTeamCacheDoesNotAuthorizeDeletion(t *testing.T) {
 	teams.EXPECT().GetTeamBySlug(ctx, "org", parentTeamSlug).
 		Return(cachedParent, previewResponse(http.StatusOK), nil).Once()
 	r := New("org", teams, nil).(*githubTeamReconciler)
-	if _, err := r.getOrCreateParentTeam(ctx); err != nil {
+	if _, err := r.getOrCreateParentTeam(ctx, slog.New(slog.DiscardHandler)); err != nil {
 		t.Fatal(err)
 	}
 	teams.EXPECT().GetTeamBySlug(ctx, "org", parentTeamSlug).
@@ -108,6 +110,7 @@ func TestParentTeamCacheDoesNotAuthorizeDeletion(t *testing.T) {
 
 func TestGetOrCreateParentTeam(t *testing.T) {
 	ctx := t.Context()
+	log := slog.New(slog.DiscardHandler)
 	parent := &github.Team{ID: new(int64(123)), Slug: new(parentTeamSlug)}
 	response := func(code int) *github.Response {
 		return &github.Response{Response: &http.Response{StatusCode: code}}
@@ -118,7 +121,7 @@ func TestGetOrCreateParentTeam(t *testing.T) {
 		teams.EXPECT().GetTeamBySlug(ctx, "org", parentTeamSlug).
 			Return(parent, response(http.StatusOK), nil).Once()
 		r := &githubTeamReconciler{org: "org", teamsService: teams}
-		team, err := r.getOrCreateParentTeam(ctx)
+		team, err := r.getOrCreateParentTeam(ctx, log)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -134,7 +137,7 @@ func TestGetOrCreateParentTeam(t *testing.T) {
 		teams.EXPECT().CreateTeam(ctx, "org", github.CreateTeamRequest{Name: parentTeamSlug, Description: new("Parent team for all teams synced by Nais."), Privacy: new("closed")}).
 			Return(parent, response(http.StatusCreated), nil).Once()
 		r := &githubTeamReconciler{org: "org", teamsService: teams}
-		team, err := r.getOrCreateParentTeam(ctx)
+		team, err := r.getOrCreateParentTeam(ctx, log)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -152,7 +155,7 @@ func TestGetOrCreateParentTeam(t *testing.T) {
 		teams.EXPECT().GetTeamBySlug(ctx, "org", parentTeamSlug).
 			Return(parent, response(http.StatusOK), nil).Once()
 		r := &githubTeamReconciler{org: "org", teamsService: teams}
-		team, err := r.getOrCreateParentTeam(ctx)
+		team, err := r.getOrCreateParentTeam(ctx, log)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -184,7 +187,7 @@ func TestSyncTeamParent(t *testing.T) {
 				}).Return(team, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).Once()
 			}
 			r := &githubTeamReconciler{org: "org", teamsService: teams}
-			if err := r.syncTeamInfo(ctx, naisTeam, team, parentID); err != nil {
+			if err := r.syncTeamInfo(ctx, naisTeam, team, parentID, slog.New(slog.DiscardHandler)); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -197,7 +200,7 @@ func TestParentTeamSlugIsReserved(t *testing.T) {
 		{Slug: parentTeamSlug},
 		{Slug: strings.ToUpper(parentTeamSlug)},
 	} {
-		_, err := r.getOrCreateTeam(t.Context(), team, 123)
+		_, err := r.getOrCreateTeam(t.Context(), team, 123, slog.New(slog.DiscardHandler))
 		if err == nil || !strings.Contains(err.Error(), "reserved for the parent team") {
 			t.Fatalf("expected reserved parent error, got %v", err)
 		}

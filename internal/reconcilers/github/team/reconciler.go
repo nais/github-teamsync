@@ -23,6 +23,14 @@ const (
 	parentTeamCacheTTL = 5 * time.Minute
 )
 
+const (
+	createTeamOperation   = "create_team"
+	updateTeamOperation   = "update_team"
+	deleteTeamOperation   = "delete_team"
+	addMemberOperation    = "add_team_member"
+	removeMemberOperation = "remove_team_member"
+)
+
 type OptFunc func(*githubTeamReconciler)
 
 func WithDryRun(dryRun bool) OptFunc {
@@ -58,17 +66,17 @@ func New(org string, teamsService TeamsService, graphClient GraphClient, opts ..
 
 func (r *githubTeamReconciler) Reconcile(ctx context.Context, source reconcilers.TeamSource, naisTeam *naisapi.Team, log *slog.Logger) error {
 	r = r.withWritePreview(log)
-	parentTeam, err := r.getOrCreateParentTeam(ctx)
+	parentTeam, err := r.getOrCreateParentTeam(ctx, log)
 	if err != nil {
 		return err
 	}
 	parentTeamID := parentTeam.GetID()
-	githubTeam, err := r.getOrCreateTeam(ctx, naisTeam, parentTeamID)
+	githubTeam, err := r.getOrCreateTeam(ctx, naisTeam, parentTeamID, log)
 	if err != nil {
 		return fmt.Errorf("unable to get or create a GitHub team for team %q: %w", naisTeam.Slug, err)
 	}
 
-	if err := r.syncTeamInfo(ctx, naisTeam, githubTeam, parentTeamID); err != nil {
+	if err := r.syncTeamInfo(ctx, naisTeam, githubTeam, parentTeamID, log); err != nil {
 		return err
 	}
 
@@ -132,10 +140,18 @@ func (r *githubTeamReconciler) Delete(ctx context.Context, _ reconcilers.TeamSou
 		return fmt.Errorf("unexpected server response from GitHub: %q: %q", resp.Status, string(body))
 	}
 
+	r.logWrite(ctx, log, "deleted GitHub team", deleteTeamOperation, slug)
 	return nil
 }
 
-func (r *githubTeamReconciler) syncTeamInfo(ctx context.Context, naisTeam *naisapi.Team, githubTeam *github.Team, parentTeamID int64) error {
+func (r *githubTeamReconciler) logWrite(ctx context.Context, log *slog.Logger, msg, operation, slug string, attrs ...any) {
+	// Dry-run writes are logged by the preview service, not as completed writes.
+	if !r.dryRun {
+		log.DebugContext(ctx, msg, append([]any{"operation", operation, "github_team", slug}, attrs...)...)
+	}
+}
+
+func (r *githubTeamReconciler) syncTeamInfo(ctx context.Context, naisTeam *naisapi.Team, githubTeam *github.Team, parentTeamID int64, log *slog.Logger) error {
 	if gitHubTeamIsUpdated(naisTeam, githubTeam, parentTeamID) {
 		return nil
 	}
@@ -154,10 +170,11 @@ func (r *githubTeamReconciler) syncTeamInfo(ctx context.Context, naisTeam *naisa
 		return fmt.Errorf("sync team info for GitHub team %q: %w", slug, err)
 	}
 
+	r.logWrite(ctx, log, "updated GitHub team", updateTeamOperation, slug)
 	return nil
 }
 
-func (r *githubTeamReconciler) getOrCreateParentTeam(ctx context.Context) (*github.Team, error) {
+func (r *githubTeamReconciler) getOrCreateParentTeam(ctx context.Context, log *slog.Logger) (*github.Team, error) {
 	cache := r.parentTeamCache
 	if cache != nil {
 		select {
@@ -173,7 +190,7 @@ func (r *githubTeamReconciler) getOrCreateParentTeam(ctx context.Context) (*gith
 	if cache != nil && time.Now().Before(cache.expiresAt) {
 		return cache.team, nil
 	}
-	team, err := r.resolveParentTeam(ctx)
+	team, err := r.resolveParentTeam(ctx, log)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +204,7 @@ func (r *githubTeamReconciler) getOrCreateParentTeam(ctx context.Context) (*gith
 	return team, nil
 }
 
-func (r *githubTeamReconciler) resolveParentTeam(ctx context.Context) (*github.Team, error) {
+func (r *githubTeamReconciler) resolveParentTeam(ctx context.Context, log *slog.Logger) (*github.Team, error) {
 	team, resp, err := r.teamsService.GetTeamBySlug(ctx, r.org, parentTeamSlug)
 	if resp == nil || resp.StatusCode != http.StatusNotFound {
 		if err := httpError(http.StatusOK, resp, err); err != nil {
@@ -212,10 +229,11 @@ func (r *githubTeamReconciler) resolveParentTeam(ctx context.Context) (*github.T
 	if err := httpError(http.StatusCreated, resp, err); err != nil {
 		return nil, fmt.Errorf("create GitHub parent team %q: %w", parentTeamSlug, err)
 	}
+	r.logWrite(ctx, log, "created GitHub parent team", createTeamOperation, parentTeamSlug)
 	return team, nil
 }
 
-func (r *githubTeamReconciler) getOrCreateTeam(ctx context.Context, naisTeam *naisapi.Team, parentTeamID int64) (*github.Team, error) {
+func (r *githubTeamReconciler) getOrCreateTeam(ctx context.Context, naisTeam *naisapi.Team, parentTeamID int64, log *slog.Logger) (*github.Team, error) {
 	desiredTeamSlug := strings.ToLower(naisTeam.Slug)
 	if desiredTeamSlug == parentTeamSlug {
 		return nil, fmt.Errorf("GitHub team slug %q is reserved for the parent team", parentTeamSlug)
@@ -272,6 +290,7 @@ func (r *githubTeamReconciler) getOrCreateTeam(ctx context.Context, naisTeam *na
 		return nil, fmt.Errorf("created GitHub team did not have the requested slug %q", desiredTeamSlug)
 	}
 
+	r.logWrite(ctx, log, "created GitHub team", createTeamOperation, desiredTeamSlug, "parent_team", parentTeamSlug)
 	return githubTeam, nil
 }
 
@@ -302,7 +321,7 @@ func (r *githubTeamReconciler) connectUsers(ctx context.Context, source reconcil
 			membershipErrors = append(membershipErrors, err)
 			continue
 		}
-
+		r.logWrite(ctx, log, "removed GitHub team member", removeMemberOperation, *githubTeam.Slug, "username", username)
 	}
 
 	membersToAdd := localOnlyMembers(gitHubUsersToApiUsers, membersAccordingToGitHub)
@@ -313,6 +332,7 @@ func (r *githubTeamReconciler) connectUsers(ctx context.Context, source reconcil
 			membershipErrors = append(membershipErrors, err)
 			continue
 		}
+		r.logWrite(ctx, log, "requested GitHub team membership", addMemberOperation, *githubTeam.Slug, "username", username)
 	}
 
 	return errors.Join(membershipErrors...)

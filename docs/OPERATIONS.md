@@ -111,6 +111,10 @@ Configuration comes from environment variables, not command-line flags.
 
 ## Dry-run, scheduling, and deletion safety
 
+Set `LOG_LEVEL=debug` to see successful GitHub writes, including team creation,
+updates, deletion, and membership changes. Each entry identifies the operation
+and GitHub team; membership entries also include the GitHub username.
+
 Dry-run performs the same reads and ownership checks, obtains App installation
 tokens, and logs proposed writes at INFO with `dry_run=true`. It sends no team or
 membership writes and does not retain simulated state between reconciliations.

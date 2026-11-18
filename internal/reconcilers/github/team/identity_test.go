@@ -112,7 +112,7 @@ func TestIdentityFailuresPreventMembershipChanges(t *testing.T) {
 					graph := NewMockGraphClient(t)
 					expectDirectMembers(t, graph, "child", "old-user")
 					r := New("org", teams, graph, WithDryRun(dryRun), WithIdentityProvider(mode.provider, "enterprise", githubv4.NewEnterpriseClient(server.URL, server.Client()))).(*githubTeamReconciler)
-					log, output := previewLog()
+					log, output := operationLog()
 					r = r.withWritePreview(log)
 					err := r.connectUsers(t.Context(), &previewSource{members: []*naisapi.Member{{Email: "user@example.com"}}}, "child", &github.Team{Slug: new("child")}, log)
 					if err == nil || errors.Is(err, errGitHubUserNotFound) {
@@ -158,7 +158,7 @@ func TestIdentityLookupDrivesMembershipChanges(t *testing.T) {
 						Return(&github.Membership{}, previewResponse(http.StatusOK), nil).Once()
 				}
 				r := New("org", teams, graph, WithDryRun(dryRun), WithIdentityProvider(mode.provider, "enterprise", githubv4.NewEnterpriseClient(server.URL, server.Client()))).(*githubTeamReconciler)
-				log, output := previewLog()
+				log, output := operationLog()
 				r = r.withWritePreview(log)
 				if err := r.connectUsers(t.Context(), &previewSource{members: []*naisapi.Member{{Email: "user@example.com"}}}, "child", &github.Team{Slug: new("child")}, log); err != nil {
 					t.Fatal(err)
