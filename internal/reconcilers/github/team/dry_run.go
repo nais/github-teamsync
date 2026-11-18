@@ -75,7 +75,7 @@ func (s *previewTeamsService) CreateTeam(ctx context.Context, _ string, req gith
 	if req.ParentTeamID != nil {
 		attrs = append(attrs, "parent_team", parentTeamSlug)
 	}
-	if err := s.record(ctx, "create_team", req.Name, attrs...); err != nil {
+	if err := s.record(ctx, createTeamOperation, req.Name, attrs...); err != nil {
 		return nil, nil, err
 	}
 	team := &github.Team{
@@ -90,7 +90,7 @@ func (s *previewTeamsService) CreateTeam(ctx context.Context, _ string, req gith
 }
 
 func (s *previewTeamsService) UpdateTeamBySlug(ctx context.Context, _ string, slug string, req github.UpdateTeamRequest) (*github.Team, *github.Response, error) {
-	if err := s.record(ctx, "update_team", slug,
+	if err := s.record(ctx, updateTeamOperation, slug,
 		"name", req.GetName(), "description", req.GetDescription(), "privacy", req.GetPrivacy(), "parent_team", parentTeamSlug); err != nil {
 		return nil, nil, err
 	}
@@ -98,21 +98,21 @@ func (s *previewTeamsService) UpdateTeamBySlug(ctx context.Context, _ string, sl
 }
 
 func (s *previewTeamsService) AddTeamMembershipBySlug(ctx context.Context, _ string, slug, user string, _ github.AddTeamMembershipRequest) (*github.Membership, *github.Response, error) {
-	if err := s.record(ctx, "add_team_member", slug, "username", user); err != nil {
+	if err := s.record(ctx, addMemberOperation, slug, "username", user); err != nil {
 		return nil, nil, err
 	}
 	return &github.Membership{}, previewResponse(http.StatusOK), nil
 }
 
 func (s *previewTeamsService) RemoveTeamMembershipBySlug(ctx context.Context, _ string, slug, user string) (*github.Response, error) {
-	if err := s.record(ctx, "remove_team_member", slug, "username", user); err != nil {
+	if err := s.record(ctx, removeMemberOperation, slug, "username", user); err != nil {
 		return nil, err
 	}
 	return previewResponse(http.StatusNoContent), nil
 }
 
 func (s *previewTeamsService) DeleteTeamBySlug(ctx context.Context, _ string, slug string) (*github.Response, error) {
-	if err := s.record(ctx, "delete_team", slug); err != nil {
+	if err := s.record(ctx, deleteTeamOperation, slug); err != nil {
 		return nil, err
 	}
 	return previewResponse(http.StatusNoContent), nil

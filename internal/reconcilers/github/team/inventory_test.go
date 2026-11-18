@@ -88,7 +88,9 @@ func TestCreateConflictOnlyRecoversOwnedTeams(t *testing.T) {
 			}
 			teams.EXPECT().GetTeamBySlug(t.Context(), "org", "child").
 				Return(&github.Team{Slug: new("child"), Parent: &github.Team{ID: &parentID}}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).Once()
-			team, err := r.getOrCreateTeam(t.Context(), &naisapi.Team{Slug: "child"}, 123)
+			log, output := operationLog()
+			team, err := r.getOrCreateTeam(t.Context(), &naisapi.Team{Slug: "child"}, 123, log)
+			checkOperations(t, output, false, nil)
 			if owned {
 				if err != nil {
 					t.Fatal(err)
@@ -120,7 +122,9 @@ func TestMatchingSlugCannotAdoptUnmanagedTeam(t *testing.T) {
 			r := &githubTeamReconciler{org: "org", teamsService: teams}
 			teams.EXPECT().GetTeamBySlug(t.Context(), "org", "child").Return(&github.Team{Slug: new("child"), Parent: tc.parent}, &github.Response{Response: &http.Response{StatusCode: http.StatusOK}}, nil).Once()
 			team := &naisapi.Team{Slug: "child"}
-			_, err := r.getOrCreateTeam(t.Context(), team, 123)
+			log, output := operationLog()
+			_, err := r.getOrCreateTeam(t.Context(), team, 123, log)
+			checkOperations(t, output, false, nil)
 			if tc.owned {
 				if err != nil {
 					t.Fatal(err)

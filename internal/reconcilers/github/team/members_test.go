@@ -118,7 +118,7 @@ func TestDirectTeamMemberFailuresPreventWrites(t *testing.T) {
 				body,
 			)
 			r := New("org", NewMockTeamsService(t), graph).(*githubTeamReconciler)
-			log, _ := previewLog()
+			log, _ := operationLog()
 			err := r.connectUsers(t.Context(), &previewSource{}, "child", &github.Team{Slug: new("child")}, log)
 			if err == nil {
 				t.Fatal("expected incomplete inventory to prevent membership writes")
@@ -148,7 +148,7 @@ func TestReconcileOnlyDirectMemberships(t *testing.T) {
 					Return(&github.Membership{}, previewResponse(http.StatusOK), nil).Once()
 			}
 			r := New("org", teams, graph, WithDryRun(dryRun), WithIdentityProvider(config.IdentityProviderEnterpriseSAML, "enterprise", identity)).(*githubTeamReconciler)
-			log, output := previewLog()
+			log, output := operationLog()
 			r = r.withWritePreview(log)
 			if err := r.connectUsers(t.Context(), &previewSource{members: []*naisapi.Member{{Email: "user@example.com"}}}, "child", &github.Team{Slug: new("child")}, log); err != nil {
 				t.Fatal(err)

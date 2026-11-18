@@ -40,13 +40,24 @@ func (s *previewSource) Members(context.Context, string) ([]*naisapi.Member, err
 	return s.members, s.err
 }
 
-func previewLog() (*slog.Logger, *bytes.Buffer) {
+func operationLog() (*slog.Logger, *bytes.Buffer) {
 	var output bytes.Buffer
-	return slog.New(slog.NewJSONHandler(&output, nil)).With("organization", "org"), &output
+	return slog.New(slog.NewJSONHandler(&output, &slog.HandlerOptions{Level: slog.LevelDebug})).With("organization", "org"), &output
 }
 
 func checkPreviewOperations(t *testing.T, output *bytes.Buffer, want []string) []map[string]any {
 	t.Helper()
+	return checkOperations(t, output, true, want)
+}
+
+func checkOperations(t *testing.T, output *bytes.Buffer, dryRun bool, want []string) []map[string]any {
+	t.Helper()
+	level := "DEBUG"
+	var dryRunField any
+	if dryRun {
+		level = "INFO"
+		dryRunField = true
+	}
 	var got []string
 	var records []map[string]any
 	decoder := json.NewDecoder(output)
@@ -61,16 +72,16 @@ func checkPreviewOperations(t *testing.T, output *bytes.Buffer, want []string) [
 		if err := json.Unmarshal(raw, &record); err != nil {
 			t.Fatal(err)
 		}
-		// Sync lifecycle logs are not write previews.
+		// Ignore sync lifecycle logs and warnings unrelated to operation records.
 		if record["dry_run"] == nil && record["operation"] == nil {
 			continue
 		}
-		if record["dry_run"] != true || record["organization"] != "org" {
-			t.Errorf("missing dry-run context: %v", record)
+		if record["dry_run"] != dryRunField || record["organization"] != "org" || record["level"] != level {
+			t.Errorf("unexpected operation log context: %v", record)
 		}
 		for _, field := range []string{`"organization":`, `"github_team":`} {
 			if count := bytes.Count(raw, []byte(field)); count != 1 {
-				t.Errorf("expected one %s field in preview, got %d: %s", field, count, raw)
+				t.Errorf("expected one %s field in operation log, got %d: %s", field, count, raw)
 			}
 		}
 		operation, ok := record["operation"].(string)
@@ -107,7 +118,7 @@ func TestDryRunExistingTeam(t *testing.T) {
 	expectDirectMembers(t, graph, "child", "old-user")
 	expectPreviewIdentity(graph, 1)
 	r := New("org", teams, graph, WithDryRun(true))
-	log, output := previewLog()
+	log, output := operationLog()
 	if err := r.Reconcile(ctx, &previewSource{members: []*naisapi.Member{{Email: "new@example.com"}}}, &naisapi.Team{Slug: "child", Purpose: "new purpose"}, log); err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +143,7 @@ func TestDryRunMissingTeamsUsesFreshPlanEachTime(t *testing.T) {
 	expectPreviewIdentity(graph, 2)
 	r := New("org", teams, graph, WithDryRun(true))
 	for range 2 {
-		log, output := previewLog()
+		log, output := operationLog()
 		if err := r.Reconcile(ctx, &previewSource{members: []*naisapi.Member{{Email: "new@example.com"}}}, &naisapi.Team{Slug: "child", Purpose: "purpose"}, log); err != nil {
 			t.Fatal(err)
 		}
@@ -156,7 +167,7 @@ func TestDryRunDeletionAndOwnership(t *testing.T) {
 				Slug: new("child"), Parent: &github.Team{ID: &parentID},
 			}, previewResponse(http.StatusOK), nil).Once()
 			r := New("org", teams, graph, WithDryRun(true))
-			log, output := previewLog()
+			log, output := operationLog()
 			err := r.Delete(ctx, nil, &naisapi.Team{Slug: "child"}, log)
 			if owned {
 				if err != nil {
@@ -183,7 +194,7 @@ func TestDryRunMissingParentCannotAdoptExistingTeam(t *testing.T) {
 	teams.EXPECT().GetTeamBySlug(ctx, "org", parentTeamSlug).Return(nil, previewResponse(http.StatusNotFound), nil).Once()
 	teams.EXPECT().GetTeamBySlug(ctx, "org", "child").Return(child, previewResponse(http.StatusOK), nil).Once()
 	r := New("org", teams, graph, WithDryRun(true))
-	log, output := previewLog()
+	log, output := operationLog()
 	if err := r.Reconcile(ctx, nil, &naisapi.Team{Slug: "child"}, log); err == nil {
 		t.Fatal("expected ownership safeguard error")
 	}
@@ -205,7 +216,7 @@ func TestDryRunInaccessibleSAMLPreventsMembershipPlan(t *testing.T) {
 	expectDirectMembers(t, graph, "child", "old-user")
 	graph.EXPECT().Query(ctx, mock.Anything, mock.Anything).Return(nil).Once()
 	r := New("org", teams, graph, WithDryRun(true))
-	log, output := previewLog()
+	log, output := operationLog()
 	if err := r.Reconcile(ctx, &previewSource{members: []*naisapi.Member{{Email: "new@example.com"}}}, &naisapi.Team{Slug: "child"}, log); err == nil {
 		t.Fatal("expected SAML safeguard error")
 	}
@@ -223,7 +234,7 @@ func TestDryRunPreviewsOrphanCleanup(t *testing.T) {
 	teams.EXPECT().GetTeamBySlug(mock.Anything, "org", "orphan").
 		Return(&github.Team{Slug: new("orphan"), Parent: parent}, previewResponse(http.StatusOK), nil).Once()
 	r := New("org", teams, graph, WithDryRun(true))
-	log, output := previewLog()
+	log, output := operationLog()
 	s := &syncer.Syncer{Client: &previewSource{}, Reconciler: r, Log: log, Workers: 1, Timeout: time.Minute, TeamTimeout: time.Second}
 	if err := s.Sync(ctx); err != nil {
 		t.Fatal(err)
@@ -249,7 +260,7 @@ func TestOrphanCleanupRechecksOwnershipBeforeDeletion(t *testing.T) {
 			teams.EXPECT().GetTeamBySlug(mock.Anything, "org", "orphan").
 				Return(&github.Team{Slug: new("orphan"), Parent: &github.Team{ID: new(int64(999))}}, previewResponse(http.StatusOK), nil).Once()
 			r := New("org", teams, graph, WithDryRun(dryRun))
-			log, output := previewLog()
+			log, output := operationLog()
 			s := &syncer.Syncer{Client: &previewSource{}, Reconciler: r, Log: log, Workers: 1, Timeout: time.Minute, TeamTimeout: time.Second}
 			if err := s.Sync(t.Context()); err == nil {
 				t.Fatal("expected ownership safeguard error")
@@ -263,7 +274,7 @@ func TestDryRunProtectsReservedParent(t *testing.T) {
 	teams := NewMockTeamsService(t)
 	graph := NewMockGraphClient(t)
 	r := New("org", teams, graph, WithDryRun(true))
-	log, output := previewLog()
+	log, output := operationLog()
 	if err := r.Delete(t.Context(), nil, &naisapi.Team{Slug: parentTeamSlug}, log); err == nil {
 		t.Fatal("expected reserved-parent safeguard error")
 	}
@@ -273,7 +284,7 @@ func TestDryRunProtectsReservedParent(t *testing.T) {
 }
 
 func TestDryRunCanceledWritesAreNotLogged(t *testing.T) {
-	log, output := previewLog()
+	log, output := operationLog()
 	s := &previewTeamsService{base: NewMockTeamsService(t), log: log, created: make(map[string]*github.Team)}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()

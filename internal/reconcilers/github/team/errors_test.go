@@ -42,7 +42,9 @@ func TestGitHubValidationErrorDetails(t *testing.T) {
 			}
 			teams.EXPECT().UpdateTeamBySlug(ctx, "org", "team", mock.Anything).
 				Return(nil, resp, apiErr).Once()
-			err = r.syncTeamInfo(ctx, &naisapi.Team{Slug: "team"}, &github.Team{Slug: new("team")}, 123)
+			log, output := operationLog()
+			err = r.syncTeamInfo(ctx, &naisapi.Team{Slug: "team"}, &github.Team{Slug: new("team")}, 123, log)
+			checkOperations(t, output, false, nil)
 			if err == nil || !strings.Contains(err.Error(), `sync team info for GitHub team "team"`) {
 				t.Fatalf("expected team sync error, got %v", err)
 			}
