@@ -42,7 +42,7 @@ func (s *previewSource) Members(context.Context, string) ([]*naisapi.Member, err
 
 func previewLog() (*slog.Logger, *bytes.Buffer) {
 	var output bytes.Buffer
-	return slog.New(slog.NewJSONHandler(&output, nil)), &output
+	return slog.New(slog.NewJSONHandler(&output, nil)).With("organization", "org"), &output
 }
 
 func checkPreviewOperations(t *testing.T, output *bytes.Buffer, want []string) []map[string]any {
@@ -51,10 +51,14 @@ func checkPreviewOperations(t *testing.T, output *bytes.Buffer, want []string) [
 	var records []map[string]any
 	decoder := json.NewDecoder(output)
 	for {
-		var record map[string]any
-		if err := decoder.Decode(&record); errors.Is(err, io.EOF) {
+		var raw json.RawMessage
+		if err := decoder.Decode(&raw); errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
+			t.Fatal(err)
+		}
+		var record map[string]any
+		if err := json.Unmarshal(raw, &record); err != nil {
 			t.Fatal(err)
 		}
 		// Sync lifecycle logs are not write previews.
@@ -63,6 +67,11 @@ func checkPreviewOperations(t *testing.T, output *bytes.Buffer, want []string) [
 		}
 		if record["dry_run"] != true || record["organization"] != "org" {
 			t.Errorf("missing dry-run context: %v", record)
+		}
+		for _, field := range []string{`"organization":`, `"github_team":`} {
+			if count := bytes.Count(raw, []byte(field)); count != 1 {
+				t.Errorf("expected one %s field in preview, got %d: %s", field, count, raw)
+			}
 		}
 		operation, ok := record["operation"].(string)
 		if !ok {

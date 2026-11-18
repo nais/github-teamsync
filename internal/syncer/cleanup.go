@@ -49,7 +49,6 @@ func (s *Syncer) deleteOrphan(ctx context.Context, slug string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	log := s.Log.With("github_team", slug)
-	err := s.Reconciler.Delete(ctx, s.Client, &naisapi.Team{Slug: slug}, log)
+	err := s.Reconciler.Delete(ctx, s.Client, &naisapi.Team{Slug: slug}, s.Log)
 	return errors.Join(err, ctx.Err())
 }
